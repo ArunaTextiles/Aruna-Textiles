@@ -8,11 +8,11 @@
 //   POST /api/auth/send-code, /api/auth/verify-code, GET /api/auth/verify
 import express from 'express'
 import cors from 'cors'
-import { config, mailLive, paymentsLive, serverReady } from './config.js'
-import { requireAdmin, select, currentUser, update, insert } from './db.js'
+import { config, mailLive, paymentsLive, serverReady, shiprocketLive } from './config.js'
+import { requireAdmin, select, currentUser, update, insert, rpc } from './db.js'
 import { confirmPayment, createCheckout, quote, recordFailure, retryPayment } from './checkout.js'
 import { verifyCheckoutSignature, verifyWebhookSignature } from './razorpay.js'
-import { changeStatus, refundOrder, refundable } from './orders.js'
+import { changeStatus, refundOrder, refundable, syncTracking } from './orders.js'
 
 export function buildApp() {
   const app = express()
@@ -210,6 +210,31 @@ export function buildApp() {
   app.get('/api/auth/verify', async (req, res) => {
     const user = await currentUser(req)
     res.json({ valid: !!user, user })
+  })
+
+  // Daily maintenance: cancel unpaid online orders + safety-net courier status sync.
+  // Vercel Cron calls this with Authorization: Bearer <CRON_SECRET> (see vercel.json).
+  app.get('/api/cron/daily', async (req, res) => {
+    const secret = process.env.CRON_SECRET
+    if (!secret || req.headers.authorization !== `Bearer ${secret}`) return res.status(401).json({ error: 'unauthorized' })
+    if (!serverReady()) return res.status(503).json({ error: 'server not configured' })
+    try {
+      const expired = await rpc('expire_unpaid_orders', { p_minutes: config.unpaidHoldMinutes }).catch((e) => `error: ${e.message}`)
+      const synced = []
+      if (shiprocketLive()) {
+        const open = await select("orders?select=id,order_no&awb=not.is.null&status=in.(packed,shipped,out_for_delivery)&order=updated_at.asc&limit=25")
+        for (const o of open) {
+          try {
+            synced.push({ order: o.order_no, ...(await syncTracking(o.id)) })
+          } catch (e) {
+            synced.push({ order: o.order_no, error: e.message })
+          }
+        }
+      }
+      res.json({ ok: true, expired, synced })
+    } catch (e) {
+      res.status(500).json({ error: e.message })
+    }
   })
 
   app.get('/health', (req, res) => res.json({ ok: true, ready: serverReady(), payments: paymentsLive(), emails: mailLive() }))
