@@ -1,29 +1,17 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "services": {
-    "web": {
-      "root": "client",
-      "framework": "vite",
-      "outputDirectory": "dist"
-    },
-    "api": {
-      "root": "server",
-      "framework": "express"
-    }
-  },
+  "buildCommand": "npm run build",
+  "outputDirectory": "client/dist",
   "rewrites": [
     {
-      "source": "/api/(.*)",
-      "destination": { "service": "api" }
-    },
-    {
-      "source": "/(.*)",
-      "destination": { "service": "web" }
+      "source": "/((?!api/|images/|video/|assets/|favicon\\.|robots\\.txt|sitemap\\.xml).*)",
+      "destination": "/index.html"
     }
   ],
   "headers": [
     { "source": "/images/(.*)", "headers": [{ "key": "Cache-Control", "value": "public, max-age=604800" }] },
-    { "source": "/video/(.*)", "headers": [{ "key": "Cache-Control", "value": "public, max-age=86400" }] }
+    { "source": "/video/(.*)", "headers": [{ "key": "Cache-Control", "value": "public, max-age=86400" }] },
+    { "source": "/assets/(.*)", "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }] }
   ],
   "crons": [
     { "path": "/api/cron/daily", "schedule": "30 3 * * *" }
