@@ -40,7 +40,7 @@ export default function Product() {
         </div>
         <div className="wrap">
           <Link to="/shop" className="back">← All collections</Link>
-          <span className="kicker">{p.technique} · Made to Order</span>
+          <span className="kicker">{p.technique}</span>
           <h2 className="h-lg">{p.name}</h2>
         </div>
       </section>

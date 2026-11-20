@@ -332,7 +332,7 @@
 .product-page .back {
   display: block; margin-bottom: 18px; font-size: 12px;
   letter-spacing: .18em; text-transform: uppercase; color: rgba(246, 240, 228, .8);
-  border-bottom: 1px solid currentColor; padding-bottom: 4px; transition: color .3s;
+  text-decoration: none; transition: color .3s;
 }
 .product-page .back:hover { color: var(--cream); }
 .product-page .pd-imgs .pd-main { aspect-ratio: 4/4.4; }
