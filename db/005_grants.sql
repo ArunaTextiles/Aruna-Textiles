@@ -2,27 +2,39 @@
 --
 -- Symptom this fixes: the API (service_role key) gets 403 "permission denied for
 -- table products" and the storefront stalls on "Loading the collection…".
--- Some Supabase projects don't auto-grant table privileges to anon/service_role,
--- so the tables exist but the API can't touch them.
 --
+-- Written to be CONDITIONAL: it grants on each table/function only if it already
+-- exists, so it will NOT fail on a project where some tables weren't created.
 -- Safe to re-run.
 
 grant usage on schema public to anon, authenticated, service_role;
 
--- public reads (catalogue + settings)
-grant select on public.products, public.posts, public.settings to anon, authenticated, service_role;
-
--- the API (service_role) writes/reads the rest
-grant select, insert, update, delete on
-  public.orders, public.order_events, public.refunds,
-  public.payment_events, public.custom_orders
-to service_role;
-
-grant select, insert, update, delete on public.products, public.posts, public.settings to service_role;
-grant select, insert on public.admins to service_role;
+do $$
+declare
+  t text;
+begin
+  foreach t in array array[
+    'products','posts','settings',
+    'orders','order_events','refunds','payment_events','custom_orders','admins'
+  ] loop
+    if to_regclass('public.' || t) is not null then
+      execute 'grant select on table public.' || t || ' to anon, authenticated, service_role';
+      execute 'grant select, insert, update, delete on table public.' || t || ' to service_role';
+    end if;
+  end loop;
+end
+$$;
 
 -- server functions (create_order, mark_order_paid, expire_unpaid_orders, …)
-grant execute on all functions in schema public to anon, authenticated, service_role;
+do $$
+begin
+  grant execute on all functions in schema public to anon, authenticated, service_role;
+end
+$$;
 alter default privileges in schema public grant execute on functions to anon, authenticated, service_role;
 
-grant usage on all sequences in schema public to service_role;
+do $$
+begin
+  grant usage on all sequences in schema public to service_role;
+end
+$$;
