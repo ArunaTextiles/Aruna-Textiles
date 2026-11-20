@@ -821,8 +821,8 @@ body.cz-open{overflow:hidden}
    Header sits clear over the hero photo in white and turns solid white with ink
    type once you scroll. Below the hero: centred title-case headings, labels
    under photos (ink on white/ivory) — white type only on dark photo banners. */
-.nav{background:transparent;color:var(--white);box-shadow:none;-webkit-backdrop-filter:none;backdrop-filter:none;text-shadow:0 1px 14px rgba(0,0,0,.28)}
-.nav.solid{background:rgba(245,241,234,.97);color:var(--ink);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);box-shadow:0 1px 0 var(--line);text-shadow:none}
+.nav{background:#F4F2EC;color:var(--ink);box-shadow:0 1px 0 var(--line);-webkit-backdrop-filter:none;backdrop-filter:none;text-shadow:none}
+.nav.solid{background:#F4F2EC;color:var(--ink);-webkit-backdrop-filter:none;backdrop-filter:none;box-shadow:0 1px 0 var(--line);text-shadow:none}
 .nav .nav-custom{background:var(--white);color:var(--ink);border-color:var(--white);text-shadow:none}
 .nav.solid .nav-custom{background:var(--ink);color:var(--white);border-color:var(--ink)}
 .nav .nav-custom:hover{background:var(--rust);border-color:var(--rust);color:#fff}
