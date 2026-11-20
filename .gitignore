@@ -12,7 +12,7 @@ dist/
 # secrets
 .env
 .env.local
-
+.env.example
 # os / editor
 .DS_Store
 Thumbs.db
