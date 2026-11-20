@@ -1,7 +1,18 @@
+# reference archives — keep on disk, never commit
+app.zip
+ECommerce-Master-Build (4).zip
+*.zip
+
+# deps & build output
 node_modules/
-client/dist/
-server/dist/
+dist/
+.vercel/
+*.tsbuildinfo
+
+# secrets
 .env
 .env.local
-*.tsbuildinfo
-.vercel
+
+# os / editor
+.DS_Store
+Thumbs.db
