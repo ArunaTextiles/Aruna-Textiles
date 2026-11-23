@@ -1,21 +1,19 @@
-# reference archives — keep on disk, never commit
+# Reference archives
 app.zip
 ECommerce-Master-Build (4).zip
 *.zip
 
-# deps & build output
+# Dependencies & build output
 node_modules/
 dist/
 .vercel/
 *.tsbuildinfo
 
-# secrets
+# Environment variables and secrets
 .env
-.env.local
-.env.example
-.env
-.env.local
-.env.example
-# os / editor
+.env.*
+!.env.example
+
+# OS / editor
 .DS_Store
 Thumbs.db
