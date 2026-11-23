@@ -332,7 +332,7 @@
 .product-page .back {
   display: block; margin-bottom: 18px; font-size: 12px;
   letter-spacing: .18em; text-transform: uppercase; color: rgba(246, 240, 228, .8);
-  text-decoration: none; transition: color .3s;
+  border-bottom: 1px solid currentColor; padding-bottom: 4px; transition: color .3s;
 }
 .product-page .back:hover { color: var(--cream); }
 .product-page .pd-imgs .pd-main { aspect-ratio: 4/4.4; }
@@ -345,8 +345,8 @@
   color: var(--cream); box-shadow: none;
   -webkit-backdrop-filter: none; backdrop-filter: none;
 }
-.nav.clear:not(.solid) .nav-inner { min-height: 88px; }
-.nav.clear:not(.solid) .nav-inner { height: 78px; }
+.nav.clear:not(.solid) .nav-inner { min-height: 101px; }
+.nav.clear:not(.solid) .nav-inner { height: 101px; }
 .nav.clear:not(.solid) .mm-shop { color: var(--cream); border-color: rgba(246, 240, 228, .7); }
 .nav.clear:not(.solid) .mm-shop:hover { background: var(--cream); color: var(--ink); border-color: var(--cream); }
 .nav.clear:not(.solid) .burger span { background: currentColor; }
@@ -380,11 +380,11 @@
 /* ---------- brand logo + tagline ---------- */
 .brand { text-align: center; line-height: 1; position: relative; }
 .brand-logo {
-  height: 40px; width: auto; display: block; margin: 0 auto;
+  height: 60px; width: auto; display: block; margin: 0 auto;
   object-fit: contain; object-position: center;
 }
 .brand-tag {
-  display: block; font-size: 9px; letter-spacing: .4em; text-transform: uppercase;
+  display: block; font-size: 12px; letter-spacing: .4em; text-transform: uppercase;
   margin-top: 6px; opacity: .8; color: inherit;
 }
 /* solid nav: maroon logo on ivory */
