@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { hasSupabase, supabase } from '../lib/supabase'
-import { signOut as doSignOut } from '../lib/auth'
+import { linkFromUrl, signOut as doSignOut, verifyEmailLink } from '../lib/auth'
 
 export interface AuthUser {
   id: string
@@ -51,6 +51,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setLoading(false)
       })
     listen()
+
+    // Confirm-signup / magic links land on the page the user was on when they signed up
+    // (e.g. ?token_hash=…&type=signup). Verify the link, sign them in, then strip the
+    // token from the address bar so a refresh doesn't re-consume it.
+    const link = linkFromUrl()
+    if (link.tokenHash && ['signup', 'email', 'magiclink', 'invite', 'email_change'].includes(link.type || '')) {
+      verifyEmailLink(link.tokenHash, link.type || 'signup')
+        .then((u) => { if (u) setUserRaw(toAuthUser(u)) })
+        .catch(() => { /* the Account page shows the friendly message via linkFromUrl() */ })
+    }
     return () => sub?.data.subscription.unsubscribe()
   }, [listen])
 

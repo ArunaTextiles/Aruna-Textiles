@@ -49,12 +49,16 @@ const friendly = (m = '') =>
                 : /weak|pwned|leaked/i.test(m) ? 'Please choose a stronger password — this one appears in known data leaks.'
                   : m
 
+// Where a confirmation/magic link should bring the user back to: the page they were
+// on when they signed up (strip the hash so section anchors don't leak into the link).
+const currentUrl = () => window.location.href.replace(/[#].*/, '')
+
 export async function signUp({ name, email, password }: { name: string; email: string; password: string }) {
   const sb = supabase()
   const { data, error } = await sb.auth.signUp({
     email: email.trim(),
     password,
-    options: { data: { full_name: name.trim() }, emailRedirectTo: `${window.location.origin}/account` },
+    options: { data: { full_name: name.trim() }, emailRedirectTo: currentUrl() },
   })
   if (error) throw new Error(friendly(error.message))
   // email confirmation on: no session until they click the link. (Supabase hides "already registered"
@@ -72,7 +76,7 @@ export async function signInWithPassword(email: string, password: string) {
 
 export async function resendConfirmation(email: string) {
   const sb = supabase()
-  const { error } = await sb.auth.resend({ type: 'signup', email: email.trim(), options: { emailRedirectTo: `${window.location.origin}/account` } })
+  const { error } = await sb.auth.resend({ type: 'signup', email: email.trim(), options: { emailRedirectTo: currentUrl() } })
   if (error) throw new Error(friendly(error.message))
 }
 
