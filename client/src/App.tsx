@@ -12,6 +12,7 @@ import Checkout from './pages/Checkout'
 import Cart from './pages/Cart'
 import OrderSuccess from './pages/OrderSuccess'
 import Account from './pages/Account'
+import ResetPassword from './pages/ResetPassword'
 import OrderDetail from './pages/OrderDetail'
 import Contact from './pages/Contact'
 import Admin from './pages/Admin'
@@ -56,6 +57,7 @@ export default function App() {
           <Route path="/checkout" element={<Checkout />} />
           <Route path="/checkout/success" element={<OrderSuccess />} />
           <Route path="/account" element={<Account />} />
+          <Route path="/account/reset" element={<ResetPassword />} />
           <Route path="/order/:orderNo" element={<OrderDetail />} />
           <Route path="/contact" element={<Contact />} />
           <Route path="/admin" element={<Admin />} />
