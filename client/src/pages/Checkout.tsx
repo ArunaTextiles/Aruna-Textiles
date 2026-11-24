@@ -21,7 +21,7 @@ const friendly = (m = '') =>
 
 export default function Checkout() {
   const { items, clear } = useCart()
-  const { user, ready } = useAuth()
+  const { user, ready, setUser } = useAuth()
   const nav = useNavigate()
   const [step, setStep] = useState(1)
   const [form, setForm] = useState({ name: '', email: '', phone: '', address: '', address2: '', city: '', state: '', pin: '' })
@@ -180,12 +180,14 @@ export default function Checkout() {
   // sign-in gate (like the reference): bag is kept, sign-in continues the flow
   if (items.length && hasSupabase && (!ready || !user)) {
     return (
-      <div className="page store"><div className="wrap co-page" style={{ maxWidth: 560, textAlign: 'center', padding: '50px 0 80px' }}>
-        <span className="store-eyebrow">Checkout</span>
-        <h1 className="store-title" style={{ fontSize: 34 }}>Almost yours</h1>
-        <p style={{ color: 'var(--ink-soft)', margin: '10px 0 26px' }}>Sign in to check out — your bag is saved to your account, so you can pick up where you left off.</p>
-        <div style={{ textAlign: 'left' }}><SignIn title="Sign in to check out" /></div>
-        <button className="link" style={{ marginTop: 18, display: 'inline-block', color: 'var(--ink-soft)' }} onClick={() => nav('/shop')}>← Continue shopping</button>
+      <div className="page store"><div className="wrap co-page" style={{ maxWidth: 560, margin: '30px auto', textAlign: 'center', padding: '40px 0 80px' }}>
+        <span className="store-eyebrow" style={{ display: 'block', marginBottom: 18 }}>Checkout</span>
+        <SignIn
+          title="Sign in to check out"
+          intro="Your bag is saved to your account, so you can pick up exactly where you left off."
+          onDone={(u) => u && setUser({ id: u.id, email: u.email || '' })}
+        />
+        <button className="auth-link" style={{ display: 'block', margin: '18px auto 0', color: 'var(--ink-soft)' }} onClick={() => nav('/shop')}>← Continue shopping</button>
       </div></div>
     )
   }

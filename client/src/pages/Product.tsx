@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api, fmtINR } from '../lib/api'
 import type { Product } from '../lib/types'
 import { seedProducts } from '../data/seed'
+import { cachedProduct, saveProduct } from '../lib/cache'
 import { useCart } from '../context/CartContext'
 import Lightbox from '../components/Lightbox'
 
@@ -29,11 +30,16 @@ export default function ProductPage() {
   const { add, setOpen } = useCart()
 
   useEffect(() => {
+    // serve from cache instantly (if we have it), then refresh from the API in the background
+    const cached = cachedProduct(slug || '')
     const found = seedProducts.find((x) => x.slug === slug)
-    api.getProduct(slug || '')
-      .then(({ product }) => setP(product as Product))
-      .catch(() => setP(found || null))
+    setP(cached || found || null)
     setImgIdx(0); setSize(0); setColour(0); setQty(1); setTab('desc')
+
+    if (!slug) return
+    api.getProduct(slug)
+      .then(({ product }) => { saveProduct(slug, product); setP(product as Product) })
+      .catch(() => setP(cached || found || null)) // offline → keep the cached/seed copy
   }, [slug])
 
   const imgs = useMemo(() => (p ? [p.image, ...(p.gallery || [])] : []), [p])
@@ -139,7 +145,7 @@ export default function ProductPage() {
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9"><path d="M13 2 3 14h7l-1 8 10-12h-7z" /></svg>
                 Buy Now
               </button>
-              <button className="cta-view" onClick={() => setOpen(true)}>View Cart</button>
+              <button className="cta-view" onClick={() => setOpen(true)}>View your bag <span aria-hidden="true">→</span></button>
             </div>
 
             <div className="pdp-trust">

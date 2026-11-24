@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { api, fmtINR } from '../lib/api'
 import type { Product, Technique } from '../lib/types'
 import { seedProducts, TECHNIQUES } from '../data/seed'
+import { cachedProducts, saveProducts, isProductsFresh } from '../lib/cache'
 import { useCart } from '../context/CartContext'
 import Lightbox, { type LbMedia } from '../components/Lightbox'
 
@@ -22,20 +23,35 @@ export default function Shop() {
   const q = params.get('q') || ''
   const [sort, setSort] = useState<SortMode>('feat')
   const nav = useNavigate()
-  const [all, setAll] = useState<Product[]>([])
-  const [loading, setLoading] = useState(true)
+  const [all, setAll] = useState<Product[]>(() => cachedProducts()?.products || seedProducts)
+  const [loading, setLoading] = useState(false) // never "loading" when we have the cache
   const [wish, setWish] = useState<string[]>(() => {
     try { return JSON.parse(localStorage.getItem('aruna-wishlist') || '[]') } catch { return [] }
   })
   const [lb, setLb] = useState<{ items: LbMedia[]; index: number } | null>(null)
   const { add } = useCart()
+  const fetched = useRef(false)
 
+  // Load the FULL catalogue once (from cache when fresh; otherwise fetch and cache it).
+  // Filters + search + sort are applied client-side, so revisiting or changing the
+  // technique pill never triggers a network round-trip.
   useEffect(() => {
-    api.getProducts({ technique: cat, q: q || undefined })
-      .then(({ products }) => setAll(products))
-      .catch(() => setAll(seedProducts))
-      .finally(() => setLoading(false))
-  }, [cat, q])
+    if (fetched.current) return
+    fetched.current = true
+    const stale = !isProductsFresh()
+    if (stale) setAll(cachedProducts()?.products || seedProducts) // show instantly, refresh in background
+    api.getProducts()
+      .then(({ products }) => {
+        saveProducts(products)
+        setAll(products)
+      })
+      .catch(() => {
+        setAll(cachedProducts()?.products || seedProducts) // offline → serve from cache
+      })
+      .finally(() => {
+        if (stale) setLoading(false)
+      })
+  }, [])
 
   const filtered = useMemo(() => {
     let list = all.filter((p) => p.published !== false)
@@ -98,7 +114,7 @@ export default function Shop() {
       {/* grid */}
       <div className="grid-wrap">
         <p className="shop-count" style={{ color: 'var(--ink-soft)', fontSize: 13, marginBottom: 6 }}>{filtered.length} {filtered.length === 1 ? 'piece' : 'pieces'}</p>
-        {loading ? (
+        {loading && all.length === 0 ? (
           <p className="muted">Loading the collection…</p>
         ) : filtered.length === 0 ? (
           <p className="muted" style={{ padding: '60px 0' }}>No pieces match that filter yet — try another technique.</p>

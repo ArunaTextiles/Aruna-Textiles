@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { hasSupabase } from '../lib/supabase'
 import { myOrders, lastSessionOrder, accessToken } from '../lib/account'
-import { saveUserName } from '../lib/auth'
+import { linkFromUrl, saveUserName } from '../lib/auth'
 import { stageOf } from '../lib/orders'
 import { api, fmtINR } from '../lib/api'
 import { openRazorpay } from '../lib/razorpay'
@@ -93,15 +93,22 @@ export default function Account() {
       </div></div>
     )
 
+  // a used/expired email link arrives with ?error_code=… — surface it on the sign-in view
+  const linkErr = (() => {
+    const l = linkFromUrl()
+    if (l.errorCode === 'otp_expired') return 'That email link has expired or was already used. Sign in below, or request a new code.'
+    return l.errorText || ''
+  })()
+
   if (!user)
     return (
       <div className="page store"><div className="wrap" style={{ maxWidth: 560, margin: '40px auto' }}>
-        <div style={{ textAlign: 'center', marginBottom: 22 }}>
-          <span className="store-eyebrow">My Account</span>
-          <h1 className="store-title" style={{ fontSize: 34 }}>Sign in</h1>
-          <p style={{ color: 'var(--ink-soft)', margin: '8px 0 24px' }}>Follow your orders and keep your bag on every device.</p>
-        </div>
-        <SignIn title="Sign in to your account" onDone={(u) => u && setUser({ id: u.id, email: u.email || '' })} />
+        {/* the sign-in card carries its own logo + heading — no second page header */}
+        <SignIn title="Sign in to your account" intro="Follow your orders, keep your bag on every device and check out faster." onDone={(u) => u && setUser({ id: u.id, email: u.email || '' })} />
+        {linkErr && <p role="status" style={{ textAlign: 'center', marginTop: 14, fontSize: 13.5, color: '#a02c1d', background: '#f6e0dc', padding: '10px 14px' }}>{linkErr}</p>}
+        <p style={{ textAlign: 'center', marginTop: 18, fontSize: 13, color: 'var(--ink-soft)' }}>
+          New here? Creating an account keeps your bag and order history on every device.
+        </p>
       </div></div>
     )
 
