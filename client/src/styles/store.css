@@ -244,6 +244,16 @@
 .ord-tab.on .n { color: rgba(255,255,255,.7); }
 
 .ord-card { border: 1px solid var(--edge); background: #fff; margin-bottom: 18px; }
+
+/* account profile card */
+.acct-card { border: 1px solid var(--edge); background: #fff; }
+.acct-card-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; padding: 22px 24px; flex-wrap: wrap; }
+.acct-card-head { display: flex; flex-direction: column; gap: 4px; }
+.acct-card-head h2 { font-family: 'Work Sans', sans-serif; font-size: 15px; font-weight: 600; margin: 0; }
+.acct-card .co-field { margin: 0; }
+.acct-card .co-lbl { display: block; font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-soft); margin-bottom: 7px; }
+.acct-card .co-field input { width: 100%; border: 1px solid var(--edge); background: #fff; padding: 12px 14px; font: inherit; font-size: 14px; }
+.acct-card .co-field input:focus { outline: none; border-color: var(--rust); }
 .ord-top { display: flex; justify-content: space-between; align-items: center; padding: 18px 20px; border-bottom: 1px solid var(--edge); flex-wrap: wrap; gap: 10px; }
 .ord-top .no { font-size: 15px; font-weight: 600; }
 .ord-top .when { font-size: 13px; color: var(--muted); margin-top: 2px; }

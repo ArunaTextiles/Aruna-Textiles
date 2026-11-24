@@ -118,6 +118,13 @@ export async function signOut() {
   await sb.auth.signOut()
 }
 
+// Save the customer's display name so it shows in the account page / order emails.
+export async function saveUserName(name: string) {
+  const sb = supabase()
+  const { error } = await sb.auth.updateUser({ data: { full_name: name.trim() } })
+  if (error) throw new Error(error.message)
+}
+
 export async function accessToken() {
   const sb = supabase()
   const { data } = await sb.auth.getSession()

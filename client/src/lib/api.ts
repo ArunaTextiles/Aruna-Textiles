@@ -24,6 +24,13 @@ async function request<T>(path: string, init: RequestInit = {}, token?: string, 
   }
 }
 
+export interface RetryPaymentResult {
+  orderNo: string
+  total: number
+  payment: string
+  razorpayOrder: { key: string; orderId: string; amount: number; currency: string; orderNo: string; customer?: { name: string; email: string; phone: string } }
+}
+
 export const api = {
   // catalog
   getProducts: (filter?: { technique?: string; q?: string }) => {
@@ -37,6 +44,9 @@ export const api = {
 
   // orders
   confirmOrder: (orderNo: string) => request<{ order: Order }>(`/orders/${orderNo}`),
+  // reopen an unpaid online order's payment (signed in) → returns a fresh Razorpay order
+  retryPayment: (orderNo: string, token: string) =>
+    request<RetryPaymentResult>('/checkout/retry', { method: 'POST', body: JSON.stringify({ orderNo }) }, token),
 
   // auth
   exchangeCode: (email: string, code: string) =>

@@ -5,7 +5,7 @@ export interface RzpOrder {
   amount: number
   currency: string
   orderNo: string
-  customer: { name: string; email: string; phone: string }
+  customer?: { name?: string; email?: string; phone?: string }
 }
 
 declare global {
@@ -47,7 +47,7 @@ export async function openRazorpay(
     currency: o.currency,
     name: 'Aruna Textile',
     description: `Order ${o.orderNo}`,
-    prefill: { name: o.customer.name, email: o.customer.email, contact: o.customer.phone },
+    prefill: { name: o.customer?.name || '', email: o.customer?.email || '', contact: o.customer?.phone || '' },
     theme: { color: '#A24E2A' },
     handler: onSuccess,
     modal: { ondismiss: () => onFailure?.({ error: { description: 'Payment cancelled' } }) },

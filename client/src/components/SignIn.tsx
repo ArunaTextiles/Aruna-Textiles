@@ -77,11 +77,22 @@ export default function SignIn({
       if (p) return setError(p)
       if (f.password !== f.confirm) return setError('The two passwords don’t match.')
       return attempt(async () => {
-        const r = await signUp({ name: f.name, email: f.email, password: f.password })
-        if (r.user) return done(r.user)
-        setMode('sent')
-        setNotice(`We’ve sent a confirmation link to ${f.email.trim()}. Open it to activate your account — your bag will be waiting.`)
-        setCooldown(60)
+        try {
+          const r = await signUp({ name: f.name, email: f.email, password: f.password })
+          if (r.user) return done(r.user)
+          setMode('sent')
+          setNotice(`We’ve sent a confirmation link to ${f.email.trim()}. Open it to activate your account — your bag will be waiting.`)
+          setCooldown(60)
+        } catch (e) {
+          const m = e instanceof Error ? e.message : ''
+          if (m.startsWith('An account with this email')) {
+            // already registered: keep the email + password they just typed, offer sign-in instead
+            go('signin')
+            setNotice('This email is already registered with Aruna. Sign in with your password below instead.')
+            return
+          }
+          throw e
+        }
       })
     }
     if (mode === 'forgot') {
@@ -143,6 +154,7 @@ export default function SignIn({
           </div>
         )}
         {mode === 'signin' && <p className="auth-intro">{intro}</p>}
+        {mode === 'signin' && notice && <p role="status" className="auth-sent" style={{ marginTop: 12 }}>{notice}</p>}
         {mode === 'forgot' && <p className="auth-intro">Enter your email and we’ll send a link to choose a new password.</p>}
         {mode === 'code' && <p className="auth-intro">We’ll email you a 6-digit code — no password needed.</p>}
         {mode === 'code-verify' && <p className="auth-intro">We sent a code to <strong>{f.email}</strong>. Enter it below, or open the link in the email.</p>}

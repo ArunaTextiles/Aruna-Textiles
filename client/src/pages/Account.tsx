@@ -2,20 +2,26 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { hasSupabase } from '../lib/supabase'
-import { myOrders, lastSessionOrder } from '../lib/account'
-import { DONE, stageOf } from '../lib/orders'
-import { fmtINR } from '../lib/api'
+import { myOrders, lastSessionOrder, accessToken } from '../lib/account'
+import { saveUserName } from '../lib/auth'
+import { stageOf } from '../lib/orders'
+import { api, fmtINR } from '../lib/api'
+import { openRazorpay } from '../lib/razorpay'
 import SignIn from '../components/SignIn'
 import type { Order } from '../lib/types'
 
-type Tab = 'all' | 'processing' | 'shipped' | 'delivered' | 'cancelled'
+type Tab = 'orders' | 'profile'
+type OTab = 'all' | 'processing' | 'shipped' | 'delivered' | 'cancelled'
 
 export default function Account() {
-  const { user, signOut } = useAuth()
+  const { user, setUser, signOut } = useAuth()
   const nav = useNavigate()
+  const [tab, setTab] = useState<Tab>('orders')
   const [orders, setOrders] = useState<Order[] | null>(null)
-  const [tab, setTab] = useState<Tab>('all')
+  const [otab, setOtab] = useState<OTab>('all')
   const [err, setErr] = useState('')
+  const [paying, setPaying] = useState('')
+  const [payMsg, setPayMsg] = useState<Record<string, string>>({})
 
   useEffect(() => {
     if (!user) { setOrders(null); return }
@@ -26,20 +32,56 @@ export default function Account() {
     })
   }, [user])
 
-  const groups: { id: Tab; label: string; list: Order[] }[] = useMemo(() => {
+  const groups: { id: OTab; label: string; list: Order[] }[] = useMemo(() => {
     const all = orders || []
-    const proc = all.filter((o) => ['placed', 'confirmed', 'packed'].includes(o.status))
-    const ship = all.filter((o) => ['shipped', 'out_for_delivery'].includes(o.status))
-    const deliv = all.filter((o) => o.status === 'delivered')
-    const canc = all.filter((o) => ['cancelled', 'returned'].includes(o.status))
     return [
       { id: 'all', label: 'All Orders', list: all },
-      { id: 'processing', label: 'Processing', list: proc },
-      { id: 'shipped', label: 'Shipped', list: ship },
-      { id: 'delivered', label: 'Delivered', list: deliv },
-      { id: 'cancelled', label: 'Cancelled', list: canc },
+      { id: 'processing', label: 'Processing', list: all.filter((o) => ['placed', 'confirmed', 'packed'].includes(o.status)) },
+      { id: 'shipped', label: 'Shipped', list: all.filter((o) => ['shipped', 'out_for_delivery'].includes(o.status)) },
+      { id: 'delivered', label: 'Delivered', list: all.filter((o) => o.status === 'delivered') },
+      { id: 'cancelled', label: 'Cancelled', list: all.filter((o) => ['cancelled', 'returned'].includes(o.status)) },
     ]
   }, [orders])
+
+  // finish paying an unpaid online order (reopens the same Razorpay order)
+  const completePayment = async (o: Order) => {
+    if (!user) return
+    setPaying(o.orderNo)
+    setPayMsg((m) => ({ ...m, [o.orderNo]: '' }))
+    try {
+      const token = await accessToken()
+      const created = await api.retryPayment(o.orderNo, token)
+      const r = await new Promise<{ ok: boolean; error?: string }>((resolve) => {
+        openRazorpay(
+          created.razorpayOrder,
+          async (resp) => {
+            try {
+              await fetch('/api/checkout/verify', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  razorpay_order_id: resp.razorpay_order_id,
+                  razorpay_payment_id: resp.razorpay_payment_id,
+                  razorpay_signature: resp.razorpay_signature,
+                }),
+              })
+            } catch { /* webhook still confirms */ }
+            resolve({ ok: true })
+          },
+          () => resolve({ ok: false, error: 'Payment was not completed. No amount has been charged — you can try again.' }),
+        ).catch(() => resolve({ ok: false, error: 'Could not open the payment window. Please try again.' }))
+      })
+      if (r.ok) {
+        setPayMsg((m) => ({ ...m, [o.orderNo]: 'Payment received — thank you!' }))
+        setOrders(await myOrders().catch(() => orders))
+      } else {
+        setPayMsg((m) => ({ ...m, [o.orderNo]: r.error || 'Payment could not be completed.' }))
+      }
+    } catch (e) {
+      setPayMsg((m) => ({ ...m, [o.orderNo]: e instanceof Error ? e.message : 'Could not start payment.' }))
+    } finally {
+      setPaying('')
+    }
+  }
 
   const first = (user?.name || user?.email || '').split(/[@\s.]+/)[0]
 
@@ -59,18 +101,18 @@ export default function Account() {
           <h1 className="store-title" style={{ fontSize: 34 }}>Sign in</h1>
           <p style={{ color: 'var(--ink-soft)', margin: '8px 0 24px' }}>Follow your orders and keep your bag on every device.</p>
         </div>
-        <SignIn title="Sign in to your account" />
+        <SignIn title="Sign in to your account" onDone={(u) => u && setUser({ id: u.id, email: u.email || '' })} />
       </div></div>
     )
 
-  const active = groups.find((g) => g.id === tab)!.list
+  const active = groups.find((g) => g.id === otab)!.list
 
   return (
     <div className="page store">
       <div className="wrap">
         <div style={{ padding: '26px 0 6px' }}>
           <span className="store-eyebrow">My Account</span>
-          <h1 className="store-title" style={{ fontSize: 36 }}>My Orders</h1>
+          <h1 className="store-title" style={{ fontSize: 36 }}>Hello, {first || 'there'}.</h1>
         </div>
 
         <div className="acct">
@@ -83,35 +125,38 @@ export default function Account() {
               </div>
             </div>
             <nav className="acct-menu">
-              <Link to="/account" className="on"><Ico d="M3 7h18M3 12h18M3 17h12" /> My Orders</Link>
-              <Link to="/account"><Ico d="M12 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10zM3 22a9 9 0 0 1 18 0" /> Profile</Link>
-              <button onClick={() => nav('/shop')}><Ico d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3 6h18" /> Addresses</button>
-              <button onClick={() => nav('/shop')}><Ico d="M12 21s-7-4.5-9.5-9C1 8.5 2.5 5 6 5c2 0 3.5 1.5 6 4 2.5-2.5 4.5-4 6.5-4 3.5 0 4.5 3.5 3.5 7-2.5 4.5-10 9-10 9z" /> Wishlist</button>
-              <button className="signout" onClick={() => signOut().catch(() => {})}><Ico d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" /> Log Out</button>
+              <button className={tab === 'orders' ? 'on' : ''} onClick={() => setTab('orders')}><Ico d="M3 7h18M3 12h18M3 17h12" /> My Orders</button>
+              <button className={tab === 'profile' ? 'on' : ''} onClick={() => setTab('profile')}><Ico d="M12 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10zM3 22a9 9 0 0 1 18 0" /> Profile</button>
+              <button onClick={() => nav('/shop')}><Ico d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3 6h18" /> Continue shopping</button>
+              <button className="signout" onClick={() => signOut().catch(() => {})}><Ico d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" /> Sign out</button>
             </nav>
           </aside>
 
           <div>
-            <div className="ord-tabs">
-              {groups.map((g) => (
-                <button key={g.id} className={`ord-tab ${tab === g.id ? 'on' : ''}`} onClick={() => setTab(g.id)}>
-                  {g.label} <span className="n">({g.list.length})</span>
-                </button>
-              ))}
-            </div>
-
-            {err && <p className="co-err" style={{ marginBottom: 12 }}>Could not load your orders: {err}</p>}
-
-            {orders === null ? (
-              <div className="ord-card" style={{ height: 140, animation: 'pulse 1.2s infinite alternate' }} />
-            ) : active.length === 0 ? (
-              <div className="ord-card" style={{ textAlign: 'center', padding: '50px 20px' }}>
-                <p style={{ fontFamily: "'Gilda Display', serif", fontSize: 22, margin: 0 }}>{tab === 'all' ? 'No orders yet' : `No ${tab} orders`}</p>
-                <p className="muted" style={{ margin: '8px 0 20px' }}>When you place an order, you can follow every step here.</p>
-                <Link to="/shop" className="s-btn">Explore the collection</Link>
-              </div>
+            {tab === 'orders' ? (
+              <>
+                <div className="ord-tabs">
+                  {groups.map((g) => (
+                    <button key={g.id} className={`ord-tab ${otab === g.id ? 'on' : ''}`} onClick={() => setOtab(g.id)}>
+                      {g.label} <span className="n">({g.list.length})</span>
+                    </button>
+                  ))}
+                </div>
+                {err && <p className="co-err" style={{ marginBottom: 12 }}>Could not load your orders: {err}</p>}
+                {orders === null ? (
+                  <div className="ord-card" style={{ height: 140, animation: 'pulse 1.2s infinite alternate' }} />
+                ) : active.length === 0 ? (
+                  <div className="ord-card" style={{ textAlign: 'center', padding: '50px 20px' }}>
+                    <p style={{ fontFamily: "'Gilda Display', serif", fontSize: 22, margin: 0 }}>{otab === 'all' ? 'No orders yet' : `No ${otab} orders`}</p>
+                    <p className="muted" style={{ margin: '8px 0 20px' }}>When you place an order, you can follow every step here.</p>
+                    <Link to="/shop" className="s-btn">Explore the collection</Link>
+                  </div>
+                ) : (
+                  active.map((o) => <OrderCard key={o.id} o={o} paying={paying} payMsg={payMsg} onPay={completePayment} />)
+                )}
+              </>
             ) : (
-              active.map((o) => <OrderCard key={o.id} o={o} />)
+              <Profile user={user} onName={(n) => { saveUserName(n).then(() => setUser({ ...user, name: n })).catch(() => {}) }} onSignOut={() => signOut().catch(() => {})} onBrowse={() => nav('/shop')} />
             )}
           </div>
         </div>
@@ -120,11 +165,54 @@ export default function Account() {
   )
 }
 
-export function OrderCard({ o, compact }: { o: Order; compact?: boolean }) {
+// ── Profile: editable name + sign out, in the same card style ──
+function Profile({ user, onName, onSignOut, onBrowse }: {
+  user: { email: string; name?: string }
+  onName: (n: string) => void
+  onSignOut: () => void
+  onBrowse: () => void
+}) {
+  const [name, setName] = useState(user.name || '')
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const [err, setErr] = useState('')
+
+  const save = () => {
+    if (!name.trim()) return setErr('Please enter your name.')
+    setErr(''); setSaving(true)
+    try { onName(name.trim()) } catch { /* ignore */ }
+    setSaving(false); setSaved(true)
+    setTimeout(() => setSaved(false), 1600)
+  }
+
+  return (
+    <div className="acct-card">
+      <div className="acct-card-row">
+        <div className="acct-card-head"><h2>Profile</h2><span className="muted" style={{ fontSize: 13 }}>{user.email}</span></div>
+        <div style={{ flex: 1, maxWidth: 360 }}>
+          <label className="co-field"><span className="co-lbl">Full name</span>
+            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Your full name" /></label>
+          {err && <p className="co-err" style={{ marginTop: 6 }}>{err}</p>}
+          <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
+            <button className="s-btn sm" onClick={save} disabled={saving || !name.trim()}>{saved ? 'Saved ✓' : saving ? 'Saving…' : 'Save'}</button>
+            <button className="s-btn ghost sm" onClick={onBrowse}>Continue shopping</button>
+          </div>
+        </div>
+      </div>
+      <div className="acct-card-row" style={{ borderTop: '1px solid var(--edge)' }}>
+        <div className="acct-card-head"><h2>Session</h2><span className="muted" style={{ fontSize: 13 }}>Signed in as {user.email}</span></div>
+        <button className="s-btn ghost sm" onClick={onSignOut}>Sign out</button>
+      </div>
+    </div>
+  )
+}
+
+export function OrderCard({ o, compact, paying, payMsg, onPay }: { o: Order; compact?: boolean; paying?: string; payMsg?: Record<string, string>; onPay?: (o: Order) => void }) {
   const nav = useNavigate()
   const stage = stageOf(o.status)
   const units = o.items.reduce((n, i) => n + i.qty, 0)
   const payText = o.paymentStatus === 'refunded' ? 'Refunded' : o.paymentStatus === 'paid' ? 'Paid online' : o.paymentMethod === 'cod' ? 'Cash on Delivery' : o.status === 'awaiting_payment' ? 'Payment pending' : 'Paid'
+  const canPay = o.status === 'awaiting_payment' && o.paymentMethod === 'online' && onPay
 
   return (
     <div className="ord-card">
@@ -154,15 +242,14 @@ export function OrderCard({ o, compact }: { o: Order; compact?: boolean }) {
           <span style={{ display: 'block', fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>{units} item{units > 1 ? 's' : ''} · {payText}</span>
         </div>
         <div className="ord-actions">
-          {o.status === 'awaiting_payment' && o.paymentMethod === 'online' && (
-            <button className="s-btn sm" onClick={() => nav('/account')}>Complete Payment</button>
-          )}
+          {canPay && <button className="s-btn sm" disabled={paying === o.orderNo} onClick={() => onPay!(o)}>{paying === o.orderNo ? 'Opening…' : 'Complete Payment'}</button>}
           <button className="s-btn ghost sm" onClick={() => nav(`/order/${o.orderNo}`)}>View Details</button>
           {(o.status === 'shipped' || o.status === 'out_for_delivery') && (
             <button className="s-btn sm" onClick={() => nav(`/order/${o.orderNo}`)}>Track Order</button>
           )}
         </div>
       </div>
+      {payMsg?.[o.orderNo] && <p role="status" style={{ margin: 0, padding: '12px 20px', borderTop: '1px solid var(--edge)', fontSize: 13.5, color: payMsg[o.orderNo].includes('thank') ? 'var(--ok)' : '#a02c1d' }}>{payMsg[o.orderNo]}</p>}
     </div>
   )
 }

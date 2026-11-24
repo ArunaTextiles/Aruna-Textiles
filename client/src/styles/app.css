@@ -402,6 +402,12 @@
 .mmenu-brand img { height: 44px; background: rgba(251, 248, 243, .92); padding: 6px 14px; border-radius: 999px; }
 .mmenu-brand span { font-size: 11px; letter-spacing: .42em; text-transform: uppercase; color: rgba(246, 240, 228, .7); }
 
+/* nav account button — person icon (signed out) / initials avatar (signed in) */
+.nav-account { display: inline-grid; place-items: center; width: 38px; height: 38px; border-radius: 50%; border: 1px solid currentColor; color: inherit; transition: .25s var(--ease); }
+.nav-account:hover { background: var(--rust); border-color: var(--rust); color: #fff; }
+.nav-account .acct-ava { width: 100%; height: 100%; background: var(--rust); color: #fff; font-family: 'Gilda Display', serif; font-size: 15px; }
+.nav-clear:not(.solid) .nav-account:hover { background: var(--cream); border-color: var(--cream); color: var(--ink); }
+
 /* footer logo — same brown mark, sized up */
 .foot .brand, .footer .brand { padding-top: 0; }
 .foot .brand-logo, .footer .brand-logo { height: 54px; margin: 0 auto; }

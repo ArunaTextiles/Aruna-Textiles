@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import CustomizeDrawer from './CustomizeDrawer'
+import { useAuth } from '../context/AuthContext'
 
 // Mirrors the original split nav: left links · centred brand · right links.
 // Anchor items scroll on the home page, otherwise they deep-link to /#section.
@@ -17,12 +18,25 @@ function useSectionNav() {
   }
 }
 
+const PersonIcon = ({ big }: { big?: boolean }) => {
+  const s = big ? 26 : 20
+  return (
+    <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+      <circle cx="12" cy="8" r="4" /><path d="M4 21c0-4 4-6 8-6s8 2 8 6" />
+    </svg>
+  )
+}
+
 export default function Nav() {
   const [menu, setMenu] = useState(false)
   const [customize, setCustomize] = useState(false)
   const [solid, setSolid] = useState(true)
   const go = useSectionNav()
   const { pathname } = useLocation()
+  const { user, ready } = useAuth()
+  // signed-in: show the account's initials; not signed in: a person icon
+  const initials = (user?.name || user?.email || '')
+    .split(/[\s.@]+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase()
   // only pages that open with a dark banner image get the dark header vignette
   const banner = pathname.startsWith('/shop') || pathname === '/'
 
@@ -80,6 +94,9 @@ export default function Nav() {
                 <a key={l.label} href={`#${l.to.slice(1)}`} onClick={(e) => { e.preventDefault(); go(l.to) }}>{l.label}</a>
               ))}
               <button type="button" onClick={openCustomize} aria-label="Customize a rug" className="nav-customize">Customize</button>
+              <Link to="/account" className="nav-account" aria-label={user ? `My account — ${user.email}` : 'Sign in'}>
+                {user ? <span className="acct-ava">{initials || 'A'}</span> : <PersonIcon />}
+              </Link>
               <Link to="/shop" className="mm-shop">Shop →</Link>
             </div>
             <button className="burger" aria-label="Open menu" aria-expanded={menu} aria-controls="mmenu" onClick={() => setMenu(true)}>
@@ -103,6 +120,9 @@ export default function Nav() {
           <a key={l.label} href={`#${l.to.slice(1)}`} onClick={(e) => { e.preventDefault(); go(l.to) }}>{l.label}</a>
         ))}
         <button type="button" onClick={openCustomize}>Customize</button>
+        <Link to="/account" onClick={closeMenu} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 22 }}>
+          {user ? <>My account — {user.name?.split(' ')[0] || user.email}</> : <>Sign in <PersonIcon big /></>}
+        </Link>
         <Link to="/shop" className="mm-shop" onClick={closeMenu}>Shop →</Link>
       </div>
 
