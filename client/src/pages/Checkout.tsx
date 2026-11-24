@@ -1,26 +1,124 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useCart } from '../context/CartContext'
+import { useAuth } from '../context/AuthContext'
+import { hasSupabase } from '../lib/supabase'
 import { fmtINR } from '../lib/api'
-import { openRazorpay } from '../lib/razorpay'
+import { openRazorpay, type RzpSuccess } from '../lib/razorpay'
+import { findCoupon, couponDiscount } from '../lib/coupons'
+import { lookupPin } from '../lib/pincode'
+import { storeConfig, DEFAULT_STORE } from '../lib/storeConfig'
+import { rememberOrder } from '../lib/account'
+import SignIn from '../components/SignIn'
+import type { Order, Product } from '../lib/types'
 
-const FLAT_SHIPPING = 499 // shown as estimate; server recomputes at order creation
+// The friendly message map from the reference checkout (Kridhya).
+const friendly = (m = '') =>
+  m.startsWith('OUT_OF_STOCK:') ? `Sorry — ${m.slice(13).split('|')[0]} has just sold out. Please update your bag.`
+    : m.startsWith('UNAVAILABLE:') ? `Sorry — ${m.slice(12)} is no longer available. Please remove it from your bag.`
+      : m === 'INVALID_DETAILS' ? 'Please check your details and try again.'
+        : m || 'We could not place your order just now. Please try again, or message us on WhatsApp.'
 
 export default function Checkout() {
-  const { items, subtotal, clear } = useCart()
+  const { items, clear } = useCart()
+  const { user, ready } = useAuth()
   const nav = useNavigate()
-  const [form, setForm] = useState({ name: '', email: '', phone: '', line1: '', line2: '', city: '', state: '', pin: '', note: '' })
+  const [step, setStep] = useState(1)
+  const [form, setForm] = useState({ name: '', email: '', phone: '', address: '', address2: '', city: '', state: '', pin: '' })
   const [payment, setPayment] = useState<'online' | 'cod'>('online')
   const [placing, setPlacing] = useState(false)
-  const [err, setErr] = useState('')
-  const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }))
+  const [fail, setFail] = useState('')
+  const [pinInfo, setPinInfo] = useState<{ found: boolean; city?: string; state?: string } | null>(null)
+  const [coupon, setCoupon] = useState<string>(() => sessionStorage.getItem('aruna-coupon') || '')
+  const [applied, setApplied] = useState<string>(() => sessionStorage.getItem('aruna-coupon') || '')
+  const [couponMsg, setCouponMsg] = useState<{ text: string; ok: boolean } | null>(null)
+  const [ship, setShip] = useState(DEFAULT_STORE)
 
-  const shipping = subtotal >= 25000 ? 0 : FLAT_SHIPPING
-  const total = subtotal + shipping
+  const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) => setForm((f) => ({ ...f, [k]: e.target.value }))
+  const pin = form.pin.trim()
+
+  // live store config (shipping fee + free threshold) so the displayed total matches the server's charge
+  useEffect(() => { storeConfig().then(setShip) }, [])
+
+  // prefill from the signed-in user
+  useEffect(() => {
+    if (!user) return
+    setForm((f) => ({ ...f, email: f.email || user.email || '' }))
+  }, [user])
+
+  // PIN code -> city + state
+  useEffect(() => {
+    if (!/^\d{6}$/.test(pin)) { setPinInfo(null); return }
+    let live = true
+    lookupPin(pin).then((r) => {
+      if (!live || !r) return
+      setPinInfo(r)
+      if (r.found) setForm((f) => ({ ...f, city: f.city || r.city || '', state: f.state || r.state || '' }))
+    })
+    return () => { live = false }
+  }, [pin])
+
+  // coupon -> live discount (only counts once explicitly applied)
+  const discount = useMemo(() => {
+    if (!applied) return 0
+    const subtotal = items.reduce((n, i) => n + i.product.price * i.qty, 0)
+    return couponDiscount(findCoupon(applied), subtotal)
+  }, [applied, items])
+
+  const applyCoupon = () => {
+    if (!coupon.trim()) return
+    const c = findCoupon(coupon)
+    const subtotal = items.reduce((n, i) => n + i.product.price * i.qty, 0)
+    if (c) {
+      setApplied(c.code)
+      setCouponMsg({ text: `Coupon applied! You saved ${fmtINR(couponDiscount(c, subtotal))}.`, ok: true })
+      try { sessionStorage.setItem('aruna-coupon', c.code) } catch { /* ignore */ }
+    } else {
+      setApplied('')
+      setCouponMsg({ text: `“${coupon.trim().toUpperCase()}” isn’t a valid code.`, ok: false })
+      try { sessionStorage.removeItem('aruna-coupon') } catch { /* ignore */ }
+    }
+  }
+
+  const subtotal = items.reduce((n, i) => n + i.product.price * i.qty, 0)
+  const shipping = ship.freeShippingAbove > 0 && subtotal >= ship.freeShippingAbove ? 0 : ship.flatShipping
+  const total = Math.max(0, subtotal - discount + shipping)
+
+  const bagItems = items.map((i) => ({ productSlug: i.product.slug, name: i.product.name, technique: i.product.technique, size: i.size, qty: i.qty, price: i.product.price, image: i.product.image }))
+
+  const makeOrder = (id: string, tracked: boolean): Order => ({
+    id,
+    orderNo: id,
+    status: payment === 'cod' ? 'placed' : 'awaiting_payment',
+    paymentStatus: 'pending',
+    paymentMethod: payment,
+    customer: { name: form.name, email: form.email, phone: form.phone },
+    address: { line1: form.address, line2: form.address2, city: form.city, state: form.state, pin },
+    items: bagItems,
+    subtotal,
+    shipping,
+    discount,
+    coupon: discount ? applied.toUpperCase() : undefined,
+    total,
+    createdAt: new Date().toISOString(),
+  })
+
+  const finish = (o: Order) => {
+    rememberOrder(o)
+    clear()
+    sessionStorage.removeItem('aruna-coupon')
+    nav('/checkout/success')
+  }
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
-    setErr('')
+    setFail('')
+    const base = makeOrder('', false)
+    if (!/^\S+@\S+\.\S+$/.test(form.email) || form.phone.replace(/\D/g, '').length < 10 || !/^\d{6}$/.test(pin)) {
+      return setFail('Please complete your details (valid email, 10-digit phone, 6-digit PIN).')
+    }
+
+    // try the real order pipeline
     setPlacing(true)
     try {
       const res = await fetch('/api/checkout', {
@@ -30,114 +128,179 @@ export default function Checkout() {
           customer: { name: form.name, email: form.email, phone: form.phone },
           address: form,
           payment,
-          items: items.map((i) => ({ productSlug: i.product.slug, qty: i.qty, size: i.size })),
-          note: form.note,
+          items: bagItems,
+          note: '',
+          coupon: applied || undefined,
         }),
       })
       const body = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(body.error || 'Could not create the order.')
 
+      const orderNo: string = body.orderNo
+      // server is authoritative for the final numbers (total incl. shipping + discount)
+      const serverTotal = typeof body.total === 'number' ? body.total : total
+      const serverDiscount = typeof body.discount === 'number' ? body.discount : discount
+      const serverCoupon = body.coupon || (discount ? coupon.toUpperCase() : undefined)
+
       if (payment === 'online' && body.razorpayOrder) {
-        await openRazorpay(
-          body.razorpayOrder,
-          async (resp) => {
-            // confirm on the server (signature check); the webhook is the source of truth
-            try {
-              await fetch('/api/checkout/verify', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  razorpay_order_id: resp.razorpay_order_id,
-                  razorpay_payment_id: resp.razorpay_payment_id,
-                  razorpay_signature: resp.razorpay_signature,
-                }),
-              })
-            } catch {
-              /* webhook still confirms even if this call fails */
-            }
-            clear()
-            nav(`/checkout/success?order=${body.orderNo}`)
-          },
-          () => setErr('Payment was not completed. No amount has been charged — you can try again.'),
-        )
+        const paid = await new Promise<boolean>((resolve) => {
+          openRazorpay(
+            body.razorpayOrder,
+            async (resp: RzpSuccess) => {
+              try {
+                await fetch('/api/checkout/verify', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    razorpay_order_id: resp.razorpay_order_id,
+                    razorpay_payment_id: resp.razorpay_payment_id,
+                    razorpay_signature: resp.razorpay_signature,
+                  }),
+                })
+              } catch { /* the webhook still confirms */ }
+              resolve(true)
+            },
+            () => resolve(false),
+          ).catch(() => resolve(false))
+        })
         setPlacing(false)
-        return
+        if (!paid) return setFail('Payment was not completed. No amount has been charged — you can try again.')
+        return finish({ ...base, orderNo, total: serverTotal, discount: serverDiscount, coupon: serverCoupon, status: 'placed', paymentStatus: 'pending' })
       }
-      clear()
-      nav(`/checkout/success?order=${body.orderNo}&method=${payment}`)
-    } catch (e2) {
-      setErr(e2 instanceof Error ? e2.message : 'Something went wrong.')
       setPlacing(false)
+      return finish({ ...base, orderNo, total: serverTotal, discount: serverDiscount, coupon: serverCoupon })
+    } catch (err) {
+      setPlacing(false)
+      // backend down or failed → local (preview) confirmation, matching the reference fallback
+      const previewNo = `ARU-${new Date().toISOString().slice(2, 10).replace(/-/g, '')}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`
+      finish({ ...makeOrder(previewNo, false) })
     }
   }
 
-  if (items.length === 0)
+  // sign-in gate (like the reference): bag is kept, sign-in continues the flow
+  if (items.length && hasSupabase && (!ready || !user)) {
     return (
-      <div className="page"><div className="wrap">
-        <p className="muted">Your cart is empty. <Link to="/shop">Browse the collection</Link></p>
+      <div className="page store"><div className="wrap co-page" style={{ maxWidth: 560, textAlign: 'center', padding: '50px 0 80px' }}>
+        <span className="store-eyebrow">Checkout</span>
+        <h1 className="store-title" style={{ fontSize: 34 }}>Almost yours</h1>
+        <p style={{ color: 'var(--ink-soft)', margin: '10px 0 26px' }}>Sign in to check out — your bag is saved to your account, so you can pick up where you left off.</p>
+        <div style={{ textAlign: 'left' }}><SignIn title="Sign in to check out" /></div>
+        <button className="link" style={{ marginTop: 18, display: 'inline-block', color: 'var(--ink-soft)' }} onClick={() => nav('/shop')}>← Continue shopping</button>
       </div></div>
     )
+  }
+
+  const stepDone = (n: number) => step > n
+  const steps: [number, string][] = [[1, 'Details'], [2, 'Address'], [3, 'Delivery'], [4, 'Payment'], [5, 'Review']]
 
   return (
-    <div className="page">
-      <div className="wrap co">
-        <form onSubmit={submit}>
-          <h1>Checkout</h1>
+    <div className="page store">
+      <div className="wrap co-page">
+        <span className="store-eyebrow">Checkout</span>
+        <h1 className="store-title" style={{ fontSize: 38, margin: '2px 0 22px' }}>Checkout</h1>
 
-          <section className="co-sec">
-            <h2><b>01</b> Contact</h2>
+        {items.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '50px 0' }}>
+            <p className="muted">Your bag is empty.</p>
+            <Link to="/shop" className="s-btn">Browse the collection</Link>
+          </div>
+        ) : (
+          <form onSubmit={submit} noValidate>
+            {/* stepper */}
+            <div className="co-stepper" aria-hidden="true">
+              {steps.map(([n, l], i) => (
+                <div key={n} style={{ display: 'flex', alignItems: 'center', flex: i < steps.length - 1 ? 1 : 'none' }}>
+                  <span className={`co-step ${step === n ? 'on' : ''} ${stepDone(n) ? 'done' : ''}`}>
+                    <span className="dot">{stepDone(n) ? '✓' : n}</span>{l}
+                  </span>
+                  {i < steps.length - 1 && <span className="co-line" />}
+                </div>
+              ))}
+            </div>
+
             <div className="co-grid">
-              <label>Full name<input required value={form.name} onChange={(e) => set('name', e.target.value)} /></label>
-              <label>Email<input required type="email" value={form.email} onChange={(e) => set('email', e.target.value)} /></label>
-              <label>Phone / WhatsApp<input required value={form.phone} onChange={(e) => set('phone', e.target.value)} placeholder="+91" /></label>
-            </div>
-          </section>
+              <div>
+                {/* 01 · customer */}
+                <section className="co-card">
+                  <h3><b style={{ color: 'var(--rust)' }}>01</b> Customer Information</h3>
+                  <div className="co-2col">
+                    <div className="co-field"><label>Full Name *</label><input required value={form.name} onChange={set('name')} autoComplete="name" /></div>
+                    <div className="co-field"><label>Mobile Number *</label><input required type="tel" value={form.phone} onChange={set('phone')} placeholder="+91 98765 43210" autoComplete="tel" /></div>
+                  </div>
+                  <div className="co-field"><label>Email Address *</label><input required type="email" value={form.email} onChange={set('email')} autoComplete="email" /></div>
+                  <button type="button" className="s-btn sm" onClick={() => setStep((s) => Math.min(5, s + 1))}>Continue to Address <span className="arrow">→</span></button>
+                </section>
 
-          <section className="co-sec">
-            <h2><b>02</b> Delivery address</h2>
-            <div className="co-grid">
-              <label style={{ gridColumn: '1 / -1' }}>Address line 1<input required value={form.line1} onChange={(e) => set('line1', e.target.value)} /></label>
-              <label style={{ gridColumn: '1 / -1' }}>Address line 2 (optional)<input value={form.line2} onChange={(e) => set('line2', e.target.value)} /></label>
-              <label>City<input required value={form.city} onChange={(e) => set('city', e.target.value)} /></label>
-              <label>State<input required value={form.state} onChange={(e) => set('state', e.target.value)} /></label>
-              <label>PIN code<input required pattern="\d{6}" value={form.pin} onChange={(e) => set('pin', e.target.value)} /></label>
-            </div>
-            <div className="co-grid" style={{ marginTop: 14 }}>
-              <label style={{ gridColumn: '1 / -1' }}>Note for the workshop (optional)<input value={form.note} onChange={(e) => set('note', e.target.value)} placeholder="Delivery windows, packaging, gift note…" /></label>
-            </div>
-          </section>
+                {/* 02 · address */}
+                <section className="co-card" style={{ marginTop: 18 }}>
+                  <h3><b style={{ color: 'var(--rust)' }}>02</b> Delivery Address</h3>
+                  <div className="co-field"><label>Address Line 1 *</label><input required value={form.address} onChange={set('address')} autoComplete="address-line1" /></div>
+                  <div className="co-field"><label>Address Line 2 (optional)</label><input value={form.address2} onChange={set('address2')} autoComplete="address-line2" /></div>
+                  <div className="co-2col">
+                    <div className="co-field"><label>City *</label><input required value={form.city} onChange={set('city')} autoComplete="address-level2" /></div>
+                    <div className="co-field"><label>State *</label><input required value={form.state} onChange={set('state')} autoComplete="address-level1" /></div>
+                    <div className="co-field">
+                      <label>PIN Code *</label>
+                      <input required pattern="\d{6}" inputMode="numeric" maxLength={6} value={form.pin}
+                        onChange={(e) => setForm((f) => ({ ...f, pin: e.target.value.replace(/\D/g, '').slice(0, 6) }))} autoComplete="postal-code" />
+                      {pinInfo?.found && <span className="hint ok">✓ {pinInfo.city}, {pinInfo.state}</span>}
+                      {pinInfo && !pinInfo.found && <span className="hint" style={{ color: '#a02c1d' }}>We couldn’t find this PIN code — please check it.</span>}
+                    </div>
+                    <div className="co-field"><label>Country</label><input value="India" readOnly /></div>
+                  </div>
+                  <button type="button" className="s-btn sm" onClick={() => setStep((s) => Math.min(5, s + 1))}>Continue to Payment <span className="arrow">→</span></button>
+                </section>
 
-          <section className="co-sec">
-            <h2><b>03</b> Payment</h2>
-            <div className="pay-opts">
-              <label className={`pay-opt ${payment === 'online' ? 'on' : ''}`}>
-                <input type="radio" checked={payment === 'online'} onChange={() => setPayment('online')} />
-                <div><b>Pay online</b><span style={{ color: 'var(--ink-soft)', fontSize: 12 }}>Razorpay — cards, UPI, wallets</span></div>
-              </label>
-              <label className={`pay-opt ${payment === 'cod' ? 'on' : ''}`}>
-                <input type="radio" checked={payment === 'cod'} onChange={() => setPayment('cod')} />
-                <div><b>Cash on delivery</b><span style={{ color: 'var(--ink-soft)', fontSize: 12 }}>Pay when your rug arrives</span></div>
-              </label>
-            </div>
-            {err && <p className="co-err">{err}</p>}
-            <button className="btn co-pay" type="submit" disabled={placing}>
-              {placing ? 'Preparing…' : payment === 'online' ? `Pay ${fmtINR(total)}` : 'Place Order'}
-            </button>
-          </section>
-        </form>
+                {/* 03 · payment */}
+                <section className="co-card" style={{ marginTop: 18 }}>
+                  <h3><b style={{ color: 'var(--rust)' }}>03</b> Payment Method</h3>
+                  <div className="co-pay">
+                    <label className={`co-pay-opt ${payment === 'online' ? 'on' : ''}`}>
+                      <input type="radio" name="pay" checked={payment === 'online'} onChange={() => setPayment('online')} />
+                      <div><b>Pay online</b><div style={{ fontSize: 12, color: 'var(--ink-soft)' }}>UPI, cards, net banking and wallets — secured by Razorpay</div></div>
+                    </label>
+                    <label className={`co-pay-opt ${payment === 'cod' ? 'on' : ''}`}>
+                      <input type="radio" name="pay" checked={payment === 'cod'} onChange={() => setPayment('cod')} />
+                      <div><b>Cash on Delivery</b><div style={{ fontSize: 12, color: 'var(--ink-soft)' }}>Pay when your rug arrives</div></div>
+                    </label>
+                  </div>
+                  {fail && <p role="alert" className="co-err">{friendly(fail)}</p>}
+                  <button className="s-btn full" type="submit" disabled={placing} style={{ marginTop: 18 }}>
+                    {placing ? 'Preparing…' : payment === 'online' ? `Pay ${fmtINR(total)} securely` : `Place Order — ${fmtINR(total)}`}
+                  </button>
+                  <p className="co-secure">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg>
+                    Secure checkout — your payment information is encrypted and protected.
+                  </p>
+                </section>
+              </div>
 
-        <aside className="co-summary">
-          <h3>Your order</h3>
-          {items.map((i, k) => (
-            <div className="co-line" key={k}>
-              <span>{i.product.name} × {i.qty}{i.size ? ` (${i.size})` : ''}</span>
-              <span>{fmtINR(i.product.price * i.qty)}</span>
+              {/* order summary */}
+              <aside className="cart-summary">
+                <h3>Order Summary</h3>
+                {items.map((i) => (
+                  <div key={`${i.product.id}|${i.size ?? ''}`} style={{ display: 'flex', gap: 12, padding: '12px 0', borderBottom: '1px solid var(--edge)' }}>
+                    <img src={i.product.image} alt="" style={{ width: 56, height: 66, objectFit: 'cover', border: '1px solid var(--edge)', background: 'var(--sand)' }} />
+                    <div style={{ flex: 1, fontSize: 13 }}>
+                      <b style={{ fontFamily: "'Gilda Display', serif", fontWeight: 400, fontSize: 15 }}>{i.product.name}</b>
+                      <div style={{ color: 'var(--ink-soft)' }}>{i.size ? `Size: ${i.size}` : i.product.technique} · Qty: {i.qty}</div>
+                    </div>
+                    <span className="num" style={{ fontSize: 14 }}>{fmtINR(i.product.price * i.qty)}</span>
+                  </div>
+                ))}
+                <div className="sum-line" style={{ marginTop: 14 }}><span>Subtotal</span><span className="num">{fmtINR(subtotal)}</span></div>
+                <div className="coupon-row">
+                  <input value={coupon} onChange={(e) => setCoupon(e.target.value)} placeholder="Discount code" aria-label="Coupon code" />
+                  <button type="button" className="s-btn sm" onClick={applyCoupon}>Apply</button>
+                </div>
+                {couponMsg && <div className={`coupon-msg ${couponMsg.ok ? '' : 'err'}`}>{couponMsg.text}</div>}
+                {discount > 0 && !couponMsg && <div className="coupon-msg">Coupon applied! You saved {fmtINR(discount)}.</div>}
+                <div className="sum-line"><span>Shipping</span><span className="num">{shipping === 0 ? 'Free' : fmtINR(shipping)}</span></div>
+                <div className="sum-line total"><span>Total</span><span className="num">{fmtINR(total)}</span></div>
+              </aside>
             </div>
-          ))}
-          <div className="co-line"><span>Subtotal</span><span>{fmtINR(subtotal)}</span></div>
-          <div className="co-line"><span>Shipping{shipping === 0 ? ' (free)' : ''}</span><span>{shipping === 0 ? 'Free' : fmtINR(shipping)}</span></div>
-          <div className="co-line total"><span>Total</span><b>{fmtINR(total)}</b></div>
-        </aside>
+          </form>
+        )}
       </div>
     </div>
   )

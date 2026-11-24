@@ -5,21 +5,30 @@ export type Technique =
   | 'Broadloom'
   | 'Jacquard'
 
+export type Category = 'Rugs' | 'Carpets' | 'Cushion Covers' | 'Throws' | 'Custom Designs'
+export type ProductTag = 'New Arrival' | 'Best Seller'
+
 export interface Product {
   id: string
   slug: string
   name: string
   technique: Technique
+  category?: Category
   price: number // INR
   comparePrice?: number
   image: string
   gallery?: string[]
-  sizes?: { label: string; price: number; stock: number }[]
+  collection?: string
+  sizes?: { label: string; price?: number; stock?: number }[]
+  colours?: { name: string; hex: string }[]
   stock: number
   blurb?: string
   description?: string
   published: boolean
   featured?: boolean
+  rating?: number
+  reviewCount?: number
+  tags?: ProductTag[]
   createdAt?: string
   updatedAt?: string
 }
@@ -48,6 +57,7 @@ export interface Order {
   id: string
   orderNo: string
   status:
+    | 'awaiting_payment'
     | 'placed'
     | 'confirmed'
     | 'packed'
@@ -55,17 +65,21 @@ export interface Order {
     | 'out_for_delivery'
     | 'delivered'
     | 'cancelled'
-  paymentStatus: 'pending' | 'paid' | 'refunded' | 'failed' | 'cod'
+    | 'returned'
+  paymentStatus: 'pending' | 'paid' | 'refunded' | 'partially_refunded' | 'failed' | 'cod'
   paymentMethod: 'online' | 'cod'
   customer: CustomerInfo
   address: Address
-  items: { name: string; qty: number; price: number; size?: string; image?: string }[]
+  items: { slug?: string; name: string; qty: number; price: number; technique?: string; size?: string; image?: string }[]
   subtotal: number
   shipping: number
+  discount?: number
   total: number
-  razorpayOrderId?: string
-  trackingNo?: string
+  coupon?: string
   courier?: string
+  trackingNo?: string
+  trackingUrl?: string
+  note?: string
   createdAt: string
 }
 

@@ -45,6 +45,13 @@ export const config = {
   storage: {
     bucket: env('SUPABASE_IMAGE_BUCKET', 'aruna-images'),
   },
+
+  // Storefront coupon codes — single source of truth, kept in sync with
+  // client/src/lib/coupons.ts (which only mirrors the *validity* for UI).
+  // kind: 'fixed' (₹ value) or 'percent' (value out of 100).
+  coupons: [
+    { code: 'ARUNA500', kind: 'fixed', value: 500, minOrder: 0 },
+  ],
 }
 
 export const serverReady = () => !!(config.supabaseUrl && config.supabaseSecret)

@@ -62,6 +62,14 @@ export async function quote({ items, pincode, payment = 'online' }) {
   }
 }
 
+/** Resolve a storefront coupon to a ₹ discount for a given subtotal (server-authoritative). */
+export function resolveCoupon(code, subtotal) {
+  const c = (config.coupons || []).find((x) => x.code === String(code || '').toUpperCase().trim())
+  if (!c || (c.minOrder > 0 && subtotal < c.minOrder)) return { code: null, discount: 0 }
+  const discount = c.kind === 'percent' ? Math.round((subtotal * c.value) / 100) : c.value
+  return { code: c.code, discount: Math.min(discount, subtotal) }
+}
+
 /** Create the order. Online: also creates the Razorpay order for the payment window. */
 export async function createCheckout(body, user = null) {
   const payment = body.payment === 'cod' ? 'cod' : 'online'
@@ -80,6 +88,7 @@ export async function createCheckout(body, user = null) {
   await rpc('expire_unpaid_orders', { p_minutes: config.unpaidHoldMinutes }).catch(() => {})
   const q = await quote({ items, pincode: address.pin, payment })
   if (!q.serviceable) throw new UserError(q.message)
+  const { code: coupon, discount } = resolveCoupon(body.coupon, q.subtotal)
 
   // Server-side order creation: prices from the DB, stock decremented atomically.
   const order = await rpc('create_order', {
@@ -94,6 +103,8 @@ export async function createCheckout(body, user = null) {
       note: String(body.note || ''),
       payment,
       shipping: q.shipping,
+      discount,
+      coupon,
     },
   }).catch((e) => {
     throw new UserError(e.message || 'Could not create the order.')
@@ -104,7 +115,7 @@ export async function createCheckout(body, user = null) {
 
   if (payment === 'cod') {
     await notify('confirmed', await getOrder(`id=eq.${order.id}`))
-    return { orderNo: order.order_no, total: order.total, payment }
+    return { orderNo: order.order_no, total: order.total, discount: order.discount || 0, coupon: order.coupon || null, payment }
   }
 
   try {

@@ -1,5 +1,6 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { hasSupabase, supabase } from '../lib/supabase'
+import { signOut as doSignOut } from '../lib/auth'
 
 export interface AuthUser {
   id: string
@@ -7,62 +8,76 @@ export interface AuthUser {
   name?: string
 }
 
+// Shape the reference (Kridhya) checkout + SignIn consume: user, ready, ensure, setUser, signOut.
 interface AuthCtx {
   user: AuthUser | null
   loading: boolean
+  ready: boolean
+  ensure: () => Promise<AuthUser | null>
+  setUser: (u: AuthUser | null) => void
   signOut: () => Promise<void>
-  sendOtp: (email: string) => Promise<void>
-  verifyOtp: (email: string, code: string) => Promise<void>
 }
 
 const Ctx = createContext<AuthCtx | null>(null)
 
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<AuthUser | null>(null)
-  const [loading, setLoading] = useState(true)
+const toAuthUser = (u: { id: string; email?: string } | null | undefined): AuthUser | null =>
+  u ? { id: u.id, email: u.email || '', name: (u as { user_metadata?: { full_name?: string } }).user_metadata?.full_name } : null
 
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [user, setUserRaw] = useState<AuthUser | null>(null)
+  const [loading, setLoading] = useState(true)
+  const listening = useRef(false)
+  let sub: { data: { subscription: { unsubscribe: () => void } } } | undefined
+
+  // Subscribe to live auth changes (sign-in on another tab, OTP confirm, magic link, …).
+  const listen = useCallback(() => {
+    if (!hasSupabase || listening.current) return
+    listening.current = true
+    sub = supabase().auth.onAuthStateChange((_e, s) => {
+      setUserRaw(toAuthUser(s?.user))
+    })
+  }, [])
+
+  // Initial session + start listening.
   useEffect(() => {
     if (!hasSupabase) {
       setLoading(false)
       return
     }
-    const sb = supabase()
-    sb.auth.getSession().then(({ data }) => {
-      const u = data.session?.user
-      setUser(u ? { id: u.id, email: u.email || '', name: (u.user_metadata?.full_name as string) } : null)
-      setLoading(false)
-    })
-    const { data: sub } = sb.auth.onAuthStateChange((_e, s) => {
-      const u = s?.user
-      setUser(u ? { id: u.id, email: u.email || '', name: u.user_metadata?.full_name as string } : null)
-    })
-    return () => sub.subscription.unsubscribe()
+    supabase()
+      .auth.getSession()
+      .then(({ data }) => {
+        setUserRaw(toAuthUser(data.session?.user))
+        setLoading(false)
+      })
+    listen()
+    return () => sub?.data.subscription.unsubscribe()
+  }, [listen])
+
+  const setUser = useCallback((u: AuthUser | null) => setUserRaw(u), [])
+
+  // Load auth on demand (checkout / account) and start listening for sign-in.
+  const ensure = useCallback(async () => {
+    if (!hasSupabase) return null
+    const { data } = await supabase().auth.getSession()
+    const u = toAuthUser(data.session?.user)
+    setUserRaw(u)
+    setLoading(false)
+    listen()
+    return u
+  }, [listen])
+
+  const signOut = useCallback(async () => {
+    await doSignOut()
+    setUserRaw(null)
   }, [])
 
-  const sendOtp = async (email: string) => {
-    const { error } = await supabase().auth.signInWithOtp({
-      email: email.trim(),
-      options: { shouldCreateUser: true, emailRedirectTo: window.location.origin + '/account' },
-    })
-    if (error) throw new Error(error.message)
-  }
+  const value = useMemo<AuthCtx>(
+    () => ({ user, loading, ready: !loading, ensure, setUser, signOut }),
+    [user, loading, ensure, setUser, signOut],
+  )
 
-  const verifyOtp = async (email: string, code: string) => {
-    const { data, error } = await supabase().auth.verifyOtp({
-      email: email.trim(),
-      token: code.trim(),
-      type: 'email',
-    })
-    if (error) throw new Error(error.message)
-    setUser({ id: data.user.id, email: data.user.email || '', name: data.user.user_metadata?.full_name as string })
-  }
-
-  const signOut = async () => {
-    await supabase().auth.signOut()
-    setUser(null)
-  }
-
-  return <Ctx.Provider value={{ user, loading, signOut, sendOtp, verifyOtp }}>{children}</Ctx.Provider>
+  return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }
 
 export const useAuth = () => {

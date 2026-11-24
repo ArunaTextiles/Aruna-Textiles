@@ -49,7 +49,7 @@ export default handle(async (req) => {
     if (q) f.push(`data->>name=ilike.*${encodeURIComponent(q.replace(/%/g, ''))}*`)
     const where = f.length ? `&${f.join('&')}` : ''
     try {
-      const rows = await select(`products?select=slug,data&status=eq.published${where}&order=created_at.desc`)
+      const rows = await select(`products?select=slug,data&status=eq.published${where}&order=updated_at.desc`)
       return json({ products: rows.map((r) => ({ ...r.data, slug: r.slug })), ready: true })
     } catch (e) {
       return json({ error: e.message }, 500)

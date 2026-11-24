@@ -9,8 +9,10 @@ import Home from './pages/Home'
 import Shop from './pages/Shop'
 import Product from './pages/Product'
 import Checkout from './pages/Checkout'
+import Cart from './pages/Cart'
 import OrderSuccess from './pages/OrderSuccess'
 import Account from './pages/Account'
+import OrderDetail from './pages/OrderDetail'
 import Contact from './pages/Contact'
 import Admin from './pages/Admin'
 import NotFound from './pages/NotFound'
@@ -50,9 +52,11 @@ export default function App() {
           <Route path="/" element={<Home />} />
           <Route path="/shop" element={<Shop />} />
           <Route path="/shop/:slug" element={<Product />} />
+          <Route path="/cart" element={<Cart />} />
           <Route path="/checkout" element={<Checkout />} />
           <Route path="/checkout/success" element={<OrderSuccess />} />
           <Route path="/account" element={<Account />} />
+          <Route path="/order/:orderNo" element={<OrderDetail />} />
           <Route path="/contact" element={<Contact />} />
           <Route path="/admin" element={<Admin />} />
           <Route path="*" element={<NotFound />} />

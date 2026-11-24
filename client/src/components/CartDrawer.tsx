@@ -43,7 +43,10 @@ export default function CartDrawer() {
             <footer className="cart-foot">
               <div className="cf-row"><span>Subtotal</span><b>{fmtINR(subtotal)}</b></div>
               <p className="cf-note">Shipping &amp; taxes calculated at checkout.</p>
-              <Link className="btn" to="/checkout" onClick={() => setOpen(false)}>Proceed to Checkout</Link>
+              <div style={{ display: 'grid', gap: 8 }}>
+                <Link className="btn" to="/checkout" onClick={() => setOpen(false)}>Proceed to Checkout</Link>
+                <Link to="/cart" onClick={() => setOpen(false)} style={{ fontSize: 12, color: 'var(--ink-soft)', textAlign: 'center', display: 'block' }}>View full bag</Link>
+              </div>
             </footer>
           </>
         )}

@@ -116,6 +116,8 @@ drop policy if exists "admins manage refunds" on public.refunds;
 create policy "admins manage refunds" on public.refunds for all using (public.is_admin()) with check (public.is_admin());
 
 alter table public.orders add column if not exists refunded_amount integer not null default 0;
+alter table public.orders add column if not exists discount integer not null default 0;
+alter table public.orders add column if not exists coupon text;
 
 -- ─────────── payment events (webhook de-dupe + audit) ───────────
 create table if not exists public.payment_events (
@@ -159,6 +161,8 @@ declare
   lines jsonb := '[]'::jsonb;
   sub int := 0;
   ship int;
+  disc int;
+  total int;
   no text;
   oid uuid;
 begin
@@ -192,14 +196,17 @@ begin
   end loop;
 
   no := 'ARN-' || to_char(now() at time zone 'Asia/Kolkata', 'YYMMDD') || '-' || upper(substr(md5(random()::text || clock_timestamp()::text), 1, 5));
+  disc := greatest(0, coalesce((p->>'discount')::int, 0));
+  -- never discount below the shipping already charged; keep total at least the shipping
+  total := greatest(sub + ship - disc, ship);
 
-  insert into public.orders (order_no, status, customer, address, items, subtotal, shipping, total, payment_method, note)
+  insert into public.orders (order_no, status, customer, address, items, subtotal, shipping, discount, coupon, total, payment_method, note)
   values (
     no,
     case when p->>'payment' = 'cod' then 'placed' else 'awaiting_payment' end,
     jsonb_build_object('name', trim(p#>>'{customer,name}'), 'email', trim(p#>>'{customer,email}'), 'phone', trim(p#>>'{customer,phone}')),
     jsonb_build_object('line1', p#>>'{address,line1}', 'line2', p#>>'{address,line2}', 'city', p#>>'{address,city}', 'state', p#>>'{address,state}', 'pin', p#>>'{address,pin}'),
-    lines, sub, ship, sub + ship,
+    lines, sub, ship, disc, p->>'coupon', total,
     case when p->>'payment' = 'cod' then 'cod' else 'online' end,
     left(p->>'note', 1000)
   ) returning id into oid;
@@ -208,7 +215,7 @@ begin
   values (oid, case when p->>'payment' = 'cod' then 'placed' else 'awaiting_payment' end,
           case when p->>'payment' = 'cod' then 'Cash on Delivery order placed' else 'Order placed — awaiting online payment' end);
 
-  return jsonb_build_object('id', oid, 'order_no', no, 'total', sub + ship, 'subtotal', sub);
+  return jsonb_build_object('id', oid, 'order_no', no, 'total', total, 'subtotal', sub, 'discount', disc, 'coupon', p->>'coupon');
 end
 $$;
 

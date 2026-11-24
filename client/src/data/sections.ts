@@ -1,11 +1,12 @@
 // Content ported 1:1 from the original index.html so the React app renders the same design.
 
 export const heroSlides = [
-  { big: '/images/hq/burgundy-living-1774.webp', small: '/images/hq/burgundy-living-1000.webp', alt: 'Burgundy Persian rug in a sunlit living room', pos: '58% 70%' },
   { big: '/images/hq/maroon-still-1774.webp', small: '/images/hq/maroon-still-1000.webp', alt: 'Maroon Persian rug with fringed border and brass vessels', pos: '62% 60%' },
   { big: '/images/hq/coral-living-1774.webp', small: '/images/hq/coral-living-1000.webp', alt: 'Coral hand-tufted rug in a sunlit living room', pos: '52% 72%' },
   { big: '/images/hq/geometric-living-1672.webp', small: '/images/hq/geometric-living-1000.webp', alt: 'Geometric rug in a sunlit room', pos: '50% 55%' },
   { big: '/images/hq/kerala-veranda-1774.webp', small: '/images/hq/kerala-veranda-1000.webp', alt: 'Red hand-knotted rug on a Kerala veranda', pos: '50% 45%' },
+  { big: '/images/hq/burgundy-living-1774.webp', small: '/images/hq/burgundy-living-1000.webp', alt: 'Burgundy Persian rug in a sunlit living room', pos: '58% 70%' },
+
 ]
 
 export const categories = [

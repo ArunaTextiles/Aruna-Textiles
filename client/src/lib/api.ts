@@ -4,13 +4,24 @@ import type { Product, Order } from './types'
 
 const BASE = import.meta.env.VITE_API_URL || ''
 
-async function request<T>(path: string, init: RequestInit = {}, token?: string): Promise<T> {
+async function request<T>(path: string, init: RequestInit = {}, token?: string, timeoutMs = 10000): Promise<T> {
   const headers: HeadersInit = { 'Content-Type': 'application/json', ...(init.headers as Record<string, string>) }
   if (token) (headers as Record<string, string>).Authorization = `Bearer ${token}`
-  const res = await fetch(`${BASE}/api${path}`, { ...init, headers })
-  const body = await res.json().catch(() => ({}))
-  if (!res.ok) throw new Error((body as { error?: string }).error || `Request failed (${res.status})`)
-  return body as T
+  // AbortController guard: if the API hangs (e.g. a stuck serverless function),
+  // fail fast so callers can fall back to local seed data instead of waiting forever.
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs)
+  try {
+    const res = await fetch(`${BASE}/api${path}`, { ...init, headers, signal: ctrl.signal })
+    const body = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error((body as { error?: string }).error || `Request failed (${res.status})`)
+    return body as T
+  } catch (e) {
+    if (ctrl.signal.aborted) throw new Error('Request timed out')
+    throw e
+  } finally {
+    clearTimeout(timer)
+  }
 }
 
 export const api = {
