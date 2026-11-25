@@ -8,7 +8,12 @@ export default function AuthToast() {
   const [msg, setMsg] = useState('')
 
   useEffect(() => {
-    const h = () => setMsg('You’re signed in — welcome back. Your bag and orders are all yours.')
+    const h = (e: Event) => {
+      const type = (e as CustomEvent).detail?.type // 'signup' for a just-confirmed email
+      setMsg(type === 'signup'
+        ? 'Email confirmed — you’re signed in. Your bag and orders are all yours.'
+        : 'You’re signed in — welcome back. Your bag and orders are all yours.')
+    }
     window.addEventListener('aruna:auth-confirmed', h)
     return () => window.removeEventListener('aruna:auth-confirmed', h)
   }, [])

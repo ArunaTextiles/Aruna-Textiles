@@ -28,15 +28,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
   const listening = useRef(false)
   let sub: { data: { subscription: { unsubscribe: () => void } } } | undefined
+  // fire the "you're signed in" notice at most once per link click
+  const confirmed = useRef(false)
+
+  // one-time read of the URL's auth-link params (signup / recovery / magic-link)
+  const link = useMemo(() => linkFromUrl(), [])
+  const isRecovery = !!(link.tokenHash && link.type === 'recovery')
+  // arrived via a confirmation/magic link: an implicit-flow ?token_hash=… or a legacy ?code=…
+  const cameFromLink = !!(link.tokenHash || /[?&#]code=/.test(window.location.href))
+
+  const fireConfirmed = () => {
+    if (confirmed.current) return
+    confirmed.current = true
+    window.dispatchEvent(new CustomEvent('aruna:auth-confirmed', { detail: { type: link.type } }))
+  }
+  const tidyUrl = () => {
+    const url = new URL(window.location.href)
+    ;['code', 'token_hash', 'type', 'error_code', 'error_description'].forEach((k) => url.searchParams.delete(k))
+    window.history.replaceState(null, '', url.pathname + (url.search || ''))
+  }
 
   // Subscribe to live auth changes (sign-in on another tab, OTP confirm, magic link, …).
   const listen = useCallback(() => {
     if (!hasSupabase || listening.current) return
     listening.current = true
-    sub = supabase().auth.onAuthStateChange((_e, s) => {
+    sub = supabase().auth.onAuthStateChange((e, s) => {
       setUserRaw(toAuthUser(s?.user))
+      // implicit-flow confirmation links sign the user in here, in ANY browser/profile —
+      // surface that with the toast and clean the URL so a refresh won't re-trigger it.
+      if (e === 'SIGNED_IN' && cameFromLink && !isRecovery) {
+        fireConfirmed()
+        tidyUrl()
+      }
     })
-  }, [])
+  }, [cameFromLink, isRecovery])
 
   // Initial session + start listening.
   useEffect(() => {
@@ -44,43 +69,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false)
       return
     }
-    const link = linkFromUrl()
-    const isRecovery = !!link.tokenHash && link.type === 'recovery'
-    // arriving from a confirmation/magic link (PKCE `?code=…` or `?token_hash=…`)
-    const cameFromLink = !!link.tokenHash || /[?&#]code=/.test(window.location.href)
-
     supabase()
       .auth.getSession()
       .then(({ data }) => {
         const u = toAuthUser(data.session?.user)
         setUserRaw(u)
         setLoading(false)
-        // Kridhya: when the session just came from clicking the email link, confirm it
-        // visibly (toast) and strip the consumed link params so a refresh doesn't reuse them.
-        // (recovery links are left in place — the reset page consumes them itself.)
+        // already signed in via the link (detectSessionInUrl exchanged it on load): confirm it
         if (u && cameFromLink && !isRecovery) {
-          window.dispatchEvent(new CustomEvent('aruna:auth-confirmed'))
-          const url = new URL(window.location.href)
-          ;['code', 'token_hash', 'type', 'error_code', 'error_description'].forEach((k) => url.searchParams.delete(k))
-          window.history.replaceState(null, '', url.pathname + (url.search || ''))
+          fireConfirmed()
+          tidyUrl()
         }
       })
     listen()
 
-    // Confirm-signup / magic links that carry a token_hash (implicit-flow links) are verified
-    // explicitly, then the token is stripped from the address bar.
+    // token_hash (implicit-flow) links: verify explicitly, then sign in + confirm.
     if (link.tokenHash && !isRecovery && ['signup', 'email', 'magiclink', 'invite', 'email_change'].includes(link.type || '')) {
       verifyEmailLink(link.tokenHash, link.type || 'signup')
         .then((u) => {
           if (u) {
             setUserRaw(toAuthUser(u))
-            window.dispatchEvent(new CustomEvent('aruna:auth-confirmed'))
+            fireConfirmed()
+            tidyUrl()
           }
         })
         .catch(() => { /* the Account page shows the friendly message via linkFromUrl() */ })
     }
     return () => sub?.data.subscription.unsubscribe()
-  }, [listen])
+  }, [listen, link, cameFromLink, isRecovery])
 
   const setUser = useCallback((u: AuthUser | null) => setUserRaw(u), [])
 

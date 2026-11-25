@@ -11,7 +11,15 @@ export const AUTH_STORAGE_KEY = 'aruna-auth'
 let client: SupabaseClient | null = null
 export function supabase(): SupabaseClient {
   if (!client && hasSupabase) client = createClient(url, key, {
-    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, flowType: 'pkce', storageKey: AUTH_STORAGE_KEY },
+    auth: {
+      persistSession: true, autoRefreshToken: true, detectSessionInUrl: true,
+      // Implicit flow (NOT pkce): confirmation / magic / reset emails carry a self-contained
+      // ?token_hash=… link that Supabase verifies server-side, so it signs the user in in ANY
+      // browser or profile — not just the one that created the account. (PKCE links only work in
+      // the originating profile, because the code_verifier lives in that profile's storage.)
+      flowType: 'implicit',
+      storageKey: AUTH_STORAGE_KEY,
+    },
   })
   return client as SupabaseClient
 }

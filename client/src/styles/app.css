@@ -422,6 +422,18 @@
 .nav .nav-links a { padding: 6px 0; }
 .nav .nav-links a:hover { color: var(--rust); }
 .nav.clear:not(.solid) .nav-links a:hover { color: var(--cream); }
+/* both sides of the logo sit on one centered line: identical text size, tracking,
+   padding and vertical centering — no wrap, no item taller/shorter than its neighbours */
+.nav .nav-links { align-items: center; flex-wrap: nowrap; }
+/* every leaf item in the row (left links, right links, Customize, profile, Shop) shares
+   the same type metrics so nothing reads "bigger" or "smaller" than its neighbour */
+.nav .nav-links a,
+.nav .nav-customize,
+.nav .mm-shop {
+  font-size: 11.5px; letter-spacing: .18em; text-transform: uppercase;
+  padding: 6px 0; line-height: 1;
+}
+.nav .nav-account { padding: 6px 0; }
 
 /* footer logo — same brown mark, sized up */
 .foot .brand, .footer .brand { padding-top: 0; }
