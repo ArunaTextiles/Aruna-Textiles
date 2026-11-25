@@ -8,7 +8,7 @@ import { openRazorpay, type RzpSuccess } from '../lib/razorpay'
 import { findCoupon, couponDiscount } from '../lib/coupons'
 import { lookupPin } from '../lib/pincode'
 import { storeConfig, DEFAULT_STORE } from '../lib/storeConfig'
-import { rememberOrder } from '../lib/account'
+import { rememberOrder, placeOrderDirect } from '../lib/account'
 import SignIn from '../components/SignIn'
 import type { Order, Product } from '../lib/types'
 
@@ -107,7 +107,7 @@ export default function Checkout() {
     rememberOrder(o)
     clear()
     sessionStorage.removeItem('aruna-coupon')
-    nav('/checkout/success')
+    nav(`/checkout/success?order=${encodeURIComponent(o.orderNo)}&method=${o.paymentMethod}`)
   }
 
   const submit = async (e: FormEvent) => {
@@ -118,9 +118,9 @@ export default function Checkout() {
       return setFail('Please complete your details (valid email, 10-digit phone, 6-digit PIN).')
     }
 
-    // try the real order pipeline
     setPlacing(true)
     try {
+      // 1) try the real order service (prices/stock/razorpay all server-authoritative)
       const res = await fetch('/api/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -134,15 +134,16 @@ export default function Checkout() {
         }),
       })
       const body = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(body.error || 'Could not create the order.')
+      if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`)
 
       const orderNo: string = body.orderNo
       // server is authoritative for the final numbers (total incl. shipping + discount)
       const serverTotal = typeof body.total === 'number' ? body.total : total
       const serverDiscount = typeof body.discount === 'number' ? body.discount : discount
-      const serverCoupon = body.coupon || (discount ? coupon.toUpperCase() : undefined)
+      const serverCoupon = body.coupon || (discount ? applied.toUpperCase() : undefined)
 
-      if (payment === 'online' && body.razorpayOrder) {
+      if (payment === 'online') {
+        if (!body.razorpayOrder) throw new Error('Online payment is not configured on the store. Please choose Cash on Delivery.')
         const paid = await new Promise<boolean>((resolve) => {
           openRazorpay(
             body.razorpayOrder,
@@ -164,16 +165,46 @@ export default function Checkout() {
           ).catch(() => resolve(false))
         })
         setPlacing(false)
-        if (!paid) return setFail('Payment was not completed. No amount has been charged — you can try again.')
+        if (!paid) {
+          // honest: the order exists (awaiting_payment) and can be paid later from My Orders
+          return setFail('Payment was not completed. No amount has been charged — the order is held and you can pay it later from My Orders.')
+        }
         return finish({ ...base, orderNo, total: serverTotal, discount: serverDiscount, coupon: serverCoupon, status: 'placed', paymentStatus: 'pending' })
       }
+
+      // COD through the server
       setPlacing(false)
       return finish({ ...base, orderNo, total: serverTotal, discount: serverDiscount, coupon: serverCoupon })
     } catch (err) {
+      // 2) order service unreachable
+      if (payment === 'cod' && hasSupabase) {
+        // Kridhya fallback: place the order directly in the database (no payment taken;
+        // the team confirms it). Real order, real tracking — never a fake.
+        try {
+          const orderNo = await placeOrderDirect({
+            customer: { name: form.name, email: form.email, phone: form.phone },
+            address: form,
+            items: bagItems.map((i) => ({ slug: i.productSlug, size: i.size, qty: i.qty })),
+            note: '',
+            payment: 'cod',
+            shipping,
+            discount,
+            coupon: discount ? applied.toUpperCase() : undefined,
+            userId: user?.id,
+          })
+          setPlacing(false)
+          return finish({ ...base, orderNo, status: 'placed' })
+        } catch {
+          /* fall through to the error message */
+        }
+      }
       setPlacing(false)
-      // backend down or failed → local (preview) confirmation, matching the reference fallback
-      const previewNo = `ARU-${new Date().toISOString().slice(2, 10).replace(/-/g, '')}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`
-      finish({ ...makeOrder(previewNo, false) })
+      if (payment === 'online') {
+        setFail('The secure payment service is temporarily unavailable, so the payment gateway could not be opened. No amount has been charged — try again in a moment, or choose Cash on Delivery.')
+      } else {
+        setFail('We could not place your order just now. Please try again, or message us on WhatsApp.')
+      }
+      return
     }
   }
 

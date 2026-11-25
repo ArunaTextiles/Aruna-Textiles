@@ -6,6 +6,48 @@ import type { Order } from './types'
 
 const SESSION_KEY = 'aruna-last-order'
 
+/**
+ * Kridhya fallback: create the order directly in the database when the order service
+ * (API) is unreachable. Runs create_order (security definer) via the anon key; for COD
+ * this is a real, trackable order the team confirms — no payment is taken.
+ * Returns the order number.
+ */
+export async function placeOrderDirect(input: {
+  customer: { name: string; email: string; phone: string }
+  address: Record<string, string>
+  items: { slug: string; size?: string; qty: number }[]
+  note: string
+  payment: 'cod' | 'online'
+  shipping: number
+  discount: number
+  coupon?: string
+  userId?: string
+}): Promise<string> {
+  const sb = supabase()
+  const { data, error } = await sb.rpc('create_order', {
+    p: {
+      customer: input.customer,
+      address: input.address,
+      items: input.items,
+      note: input.note,
+      payment: input.payment,
+      shipping: input.shipping,
+      discount: input.discount,
+      coupon: input.coupon || null,
+    },
+  })
+  if (error) throw new Error(error.message)
+  // link to the signed-in customer so it shows under My Orders (same as the server does)
+  if (input.userId && data?.id) {
+    try {
+      await sb.rpc('attach_order_user', { p_order: data.id, p_user: input.userId })
+    } catch {
+      /* non-fatal: the order still exists, it just won't be listed under the account */
+    }
+  }
+  return data.order_no
+}
+
 function mapRow(r: Record<string, unknown>): Order {
   const items = (r.items as Order['items']) || []
   return {
@@ -46,19 +88,20 @@ export async function orderByNo(orderNo: string): Promise<Order | null> {
 
 /** The customer's own orders, newest first (Supabase RLS scopes to the signed-in user). */
 export async function myOrders(): Promise<Order[]> {
-  if (!hasSupabase) return sessionOrders()
-  const { data, error } = await supabase()
-    .from('orders')
-    .select('id, order_no, status, payment_status, payment_method, customer, address, items, subtotal, shipping, total, coupon, courier, tracking_no, tracking_url, created_at')
-    .order('created_at', { ascending: false })
-    .limit(50)
-  if (error) throw new Error(error.message)
-  const rows = (data || []) as Record<string, unknown>[]
-  const mapped = rows.map(mapRow)
-  // merge in the most recent session order if it isn't there yet (covers brand-new orders)
-  const last = lastSessionOrder()
-  if (last && !mapped.some((o) => o.orderNo === last.orderNo)) mapped.unshift(last)
-  return mapped
+  if (hasSupabase) {
+    const { data, error } = await supabase()
+      .from('orders')
+      .select('id, order_no, status, payment_status, payment_method, customer, address, items, subtotal, shipping, total, coupon, courier, tracking_no, tracking_url, created_at')
+      .order('created_at', { ascending: false })
+      .limit(50)
+    if (!error) {
+      // DB is the source of truth — only surface session orders when the DB can't be reached
+      const rows = (data || []) as Record<string, unknown>[]
+      return rows.map(mapRow)
+    }
+  }
+  const session = lastSessionOrder()
+  return session ? [session] : []
 }
 
 export function lastSessionOrder(): Order | null {

@@ -17,8 +17,6 @@ declare global {
 export function loadRazorpay(): Promise<boolean> {
   return new Promise((resolve) => {
     if (window.Razorpay) return resolve(true)
-    const key = (import.meta.env.VITE_RAZORPAY_KEY_ID as string) || ''
-    if (!key) return resolve(false)
     const s = document.createElement('script')
     s.src = 'https://checkout.razorpay.com/v1/checkout.js'
     s.onload = () => resolve(true)
