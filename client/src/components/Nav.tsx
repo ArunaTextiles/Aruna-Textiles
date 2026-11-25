@@ -41,11 +41,18 @@ export default function Nav() {
   const banner = pathname.startsWith('/shop') || pathname === '/'
 
   useEffect(() => {
-    setSolid(window.scrollY > 60)
-    const onScroll = () => setSolid(window.scrollY > 60)
-    window.addEventListener('scroll', onScroll, { passive: true })
-    return () => window.removeEventListener('scroll', onScroll)
-  }, [pathname])
+    // Banner pages (home, shop) start transparent over the dark photo and turn solid on scroll.
+    // Every other page (account, checkout, cart, …) is light, so the solid ivory header is
+    // always on there — otherwise the cream nav text would be invisible on a white background.
+    if (!banner) {
+      setSolid(true)
+      return
+    }
+    const update = () => setSolid(window.scrollY > 60)
+    update()
+    window.addEventListener('scroll', update, { passive: true })
+    return () => window.removeEventListener('scroll', update)
+  }, [pathname, banner])
 
   useEffect(() => {
     document.body.style.overflow = menu ? 'hidden' : ''
