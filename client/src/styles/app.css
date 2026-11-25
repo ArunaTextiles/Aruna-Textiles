@@ -378,23 +378,23 @@
 /* ---------- brand logo + tagline (one brown mark, same everywhere) ---------- */
 .brand { text-align: center; line-height: 1; position: relative; }
 .brand-logo {
-  height: 58px; width: auto; display: block; margin: 0 auto;
+  height: 48px; width: auto; display: block; margin: 0 auto;
   object-fit: contain; object-position: center;
 }
 .brand-tag {
-  display: block; font-size: 11px; letter-spacing: .44em; text-transform: uppercase;
-  margin-top: 10px; opacity: .9; color: inherit; font-weight: 500;
+  display: block; font-size: 10px; letter-spacing: .42em; text-transform: uppercase;
+  margin-top: 7px; opacity: .9; color: inherit; font-weight: 500;
 }
 /* transparent nav over dark banners: same brown logo on a soft cream backplate (no colour flip) */
 .nav.clear:not(.solid) .brand-logo {
-  background: rgba(251, 248, 243, .92); padding: 7px 16px; border-radius: 999px;
+  background: rgba(251, 248, 243, .92); padding: 5px 14px; border-radius: 999px;
   box-shadow: 0 3px 14px -6px rgba(0, 0, 0, .35);
 }
 .nav.clear:not(.solid) .brand-tag { color: var(--cream); }
 /* solid nav: a touch smaller to fit the shorter bar */
-.nav.solid .brand-logo { height: 50px; }
-@media (max-width: 1180px) { .brand-logo { height: 44px; } .brand-tag { font-size: 9.5px; } }
-@media (max-width: 760px) { .brand-logo { height: 36px; } .brand-tag { display: none; } }
+.nav.solid .brand-logo { height: 44px; }
+@media (max-width: 1180px) { .brand-logo { height: 40px; } .brand-tag { font-size: 9px; margin-top: 5px; } }
+@media (max-width: 760px) { .brand-logo { height: 34px; } .brand-tag { display: none; } }
 
 /* mobile menu brand (dark charcoal sheet — cream backplate keeps the brown mark readable) */
 .mmenu-brand { display: flex; flex-direction: column; align-items: center; gap: 9px; margin-bottom: 20px; }
