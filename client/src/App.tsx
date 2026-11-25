@@ -1,7 +1,8 @@
-import { Routes, Route, useLocation } from 'react-router-dom'
+import { Routes, Route, useLocation, useNavigate } from 'react-router-dom'
 import { useEffect } from 'react'
 import { CartProvider } from './context/CartContext'
 import { AuthProvider } from './context/AuthContext'
+import { linkFromUrl } from './lib/auth'
 import Nav from './components/Nav'
 import Footer from './components/Footer'
 import CartDrawer from './components/CartDrawer'
@@ -20,6 +21,17 @@ import NotFound from './pages/NotFound'
 
 export default function App() {
   const { pathname, hash } = useLocation()
+  const navigate = useNavigate()
+
+  // Kridhya-style global handler: a recovery (password-reset) email link must reach the
+  // reset flow no matter which page its base URL lands on — the SPA serves every path,
+  // so redirect anywhere→/account/reset preserving the token_hash in the query.
+  useEffect(() => {
+    const l = linkFromUrl()
+    if (l.tokenHash && l.type === 'recovery' && !pathname.startsWith('/account/reset')) {
+      navigate({ pathname: '/account/reset', search: `?type=recovery&token_hash=${encodeURIComponent(l.tokenHash)}` }, { replace: true })
+    }
+  }, [pathname, navigate])
 
   useEffect(() => {
     if (hash) {
