@@ -69,7 +69,23 @@ export default function SignIn({
     if (mode !== 'code-verify' && !emailOk()) return setError('Please enter a valid email address.')
     if (mode === 'signin') {
       if (!f.password) return setError('Enter your password.')
-      return attempt(async () => done(await signInWithPassword(f.email, f.password)))
+      return attempt(async () => {
+        try {
+          done(await signInWithPassword(f.email, f.password))
+        } catch (err) {
+          const m = err instanceof Error ? err.message : ''
+          if (m.startsWith('We couldn’t sign you in')) {
+            // No matching account / password (Supabase never says which): hand off to sign-up
+            // carrying over email + password — Kridhya pattern: the user only adds their name.
+            go('signup')
+            setF((x) => ({ ...x, confirm: '' }))
+            setNotice(`We couldn’t sign in with ${f.email.trim()} — no account yet, or the password doesn’t match. If you’re new here, we’ve carried over your email and password: just add your name to create the account.`)
+            return
+          }
+          if (m.startsWith('Please confirm your email')) throw err // handled below by the resend button
+          throw err
+        }
+      })
     }
     if (mode === 'signup') {
       if (!f.name.trim()) return setError('Please enter your name.')
@@ -81,7 +97,7 @@ export default function SignIn({
           const r = await signUp({ name: f.name, email: f.email, password: f.password })
           if (r.user) return done(r.user)
           setMode('sent')
-          setNotice(`We’ve sent a confirmation link to ${f.email.trim()}. Open it to activate your account — your bag will be waiting.`)
+          setNotice(`We’ve sent a confirmation link to ${f.email.trim()}. Open it — you’ll land right back on this page and be signed in automatically.`)
           setCooldown(60)
         } catch (e) {
           const m = e instanceof Error ? e.message : ''
@@ -155,6 +171,7 @@ export default function SignIn({
         )}
         {mode === 'signin' && <p className="auth-intro">{intro}</p>}
         {mode === 'signin' && notice && <p role="status" className="auth-sent" style={{ marginTop: 12 }}>{notice}</p>}
+        {mode === 'signup' && notice && <p role="status" className="auth-sent" style={{ marginTop: 12 }}>{notice}</p>}
         {mode === 'forgot' && <p className="auth-intro">Enter your email and we’ll send a link to choose a new password.</p>}
         {mode === 'code' && <p className="auth-intro">We’ll email you a 6-digit code — no password needed.</p>}
         {mode === 'code-verify' && <p className="auth-intro">We sent a code to <strong>{f.email}</strong>. Enter it below, or open the link in the email.</p>}
@@ -196,15 +213,6 @@ export default function SignIn({
 
           {error && <p role="alert" className="auth-error">{error}</p>}
 
-          {mode === 'signin' && error.startsWith('We couldn’t sign you in') && (
-            <div className="auth-help">
-              <p>Check the email and password, or choose what fits:</p>
-              <div className="auth-help-actions">
-                <button type="button" onClick={() => { go('signup'); setF((x) => ({ ...x, password: '', confirm: '' })) }}>Create an account</button>
-                <button type="button" onClick={() => go('forgot')}>Reset my password</button>
-              </div>
-            </div>
-          )}
           {error.startsWith('Please confirm your email') && (
             <button type="button" disabled={busy || cooldown > 0}
               onClick={() => attempt(async () => { await resendConfirmation(f.email); setNotice('Confirmation email sent again.'); setCooldown(60) })} className="auth-link">

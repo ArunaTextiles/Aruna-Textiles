@@ -4,6 +4,7 @@ import { CartProvider } from './context/CartContext'
 import { AuthProvider } from './context/AuthContext'
 import { linkFromUrl } from './lib/auth'
 import Nav from './components/Nav'
+import AuthToast from './components/AuthToast'
 import Footer from './components/Footer'
 import CartDrawer from './components/CartDrawer'
 import Home from './pages/Home'
@@ -77,6 +78,7 @@ export default function App() {
         </Routes>
         {showFooter && <Footer />}
         <CartDrawer />
+        <AuthToast />
       </CartProvider>
     </AuthProvider>
   )

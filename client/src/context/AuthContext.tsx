@@ -44,21 +44,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false)
       return
     }
+    const link = linkFromUrl()
+    const isRecovery = !!link.tokenHash && link.type === 'recovery'
+    // arriving from a confirmation/magic link (PKCE `?code=…` or `?token_hash=…`)
+    const cameFromLink = !!link.tokenHash || /[?&#]code=/.test(window.location.href)
+
     supabase()
       .auth.getSession()
       .then(({ data }) => {
-        setUserRaw(toAuthUser(data.session?.user))
+        const u = toAuthUser(data.session?.user)
+        setUserRaw(u)
         setLoading(false)
+        // Kridhya: when the session just came from clicking the email link, confirm it
+        // visibly (toast) and strip the consumed link params so a refresh doesn't reuse them.
+        // (recovery links are left in place — the reset page consumes them itself.)
+        if (u && cameFromLink && !isRecovery) {
+          window.dispatchEvent(new CustomEvent('aruna:auth-confirmed'))
+          const url = new URL(window.location.href)
+          ;['code', 'token_hash', 'type', 'error_code', 'error_description'].forEach((k) => url.searchParams.delete(k))
+          window.history.replaceState(null, '', url.pathname + (url.search || ''))
+        }
       })
     listen()
 
-    // Confirm-signup / magic links land on the page the user was on when they signed up
-    // (e.g. ?token_hash=…&type=signup). Verify the link, sign them in, then strip the
-    // token from the address bar so a refresh doesn't re-consume it.
-    const link = linkFromUrl()
-    if (link.tokenHash && ['signup', 'email', 'magiclink', 'invite', 'email_change'].includes(link.type || '')) {
+    // Confirm-signup / magic links that carry a token_hash (implicit-flow links) are verified
+    // explicitly, then the token is stripped from the address bar.
+    if (link.tokenHash && !isRecovery && ['signup', 'email', 'magiclink', 'invite', 'email_change'].includes(link.type || '')) {
       verifyEmailLink(link.tokenHash, link.type || 'signup')
-        .then((u) => { if (u) setUserRaw(toAuthUser(u)) })
+        .then((u) => {
+          if (u) {
+            setUserRaw(toAuthUser(u))
+            window.dispatchEvent(new CustomEvent('aruna:auth-confirmed'))
+          }
+        })
         .catch(() => { /* the Account page shows the friendly message via linkFromUrl() */ })
     }
     return () => sub?.data.subscription.unsubscribe()
