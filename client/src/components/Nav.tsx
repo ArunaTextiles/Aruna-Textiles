@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import CustomizeDrawer from './CustomizeDrawer'
 import { useAuth } from '../context/AuthContext'
+import { useCart } from '../context/CartContext'
 
 // Mirrors the original split nav: left links · centred brand · right links.
 // Anchor items scroll on the home page, otherwise they deep-link to /#section.
@@ -27,6 +28,19 @@ const PersonIcon = ({ big }: { big?: boolean }) => {
   )
 }
 
+// Header bag icon with a live item-count badge.
+const BagIcon = ({ big, count, onClick }: { big?: boolean; count: number; onClick: () => void }) => {
+  const s = big ? 24 : 20
+  return (
+    <button type="button" className="nav-bag" onClick={onClick} aria-label={`Shopping bag, ${count} item${count === 1 ? '' : 's'}`}>
+      <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+        <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" /><path d="M3 6h18M16 10a4 4 0 0 1-8 0" />
+      </svg>
+      {count > 0 && <span className="nav-bag-count">{count > 99 ? '99+' : count}</span>}
+    </button>
+  )
+}
+
 export default function Nav() {
   const [menu, setMenu] = useState(false)
   const [customize, setCustomize] = useState(false)
@@ -34,6 +48,7 @@ export default function Nav() {
   const go = useSectionNav()
   const { pathname } = useLocation()
   const { user, ready } = useAuth()
+  const { count, setOpen } = useCart()
   // signed-in: show the account's initials; not signed in: a person icon
   const initials = (user?.name || user?.email || '')
     .split(/[\s.@]+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase()
@@ -101,6 +116,7 @@ export default function Nav() {
                 <a key={l.label} href={`#${l.to.slice(1)}`} onClick={(e) => { e.preventDefault(); go(l.to) }}>{l.label}</a>
               ))}
               <button type="button" onClick={openCustomize} aria-label="Customize a rug" className="nav-customize">Customize</button>
+              <BagIcon count={count} onClick={() => setOpen(true)} />
               <Link to="/account" className="nav-account" aria-label={user ? `My account — ${user.email}` : 'Sign in'}>
                 {user ? <span className="acct-ava">{initials || 'A'}</span> : <PersonIcon />}
               </Link>
@@ -127,6 +143,9 @@ export default function Nav() {
           <a key={l.label} href={`#${l.to.slice(1)}`} onClick={(e) => { e.preventDefault(); go(l.to) }}>{l.label}</a>
         ))}
         <button type="button" onClick={openCustomize}>Customize</button>
+        <button type="button" onClick={() => { closeMenu(); setOpen(true) }} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 22 }}>
+          Bag {count > 0 && <span style={{ fontSize: 14, opacity: .7 }}>({count})</span>}
+        </button>
         <Link to="/account" onClick={closeMenu} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 22 }}>
           {user ? <>My account — {user.name?.split(' ')[0] || user.email}</> : <>Sign in <PersonIcon big /></>}
         </Link>

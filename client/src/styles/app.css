@@ -434,11 +434,26 @@
   padding: 6px 0; line-height: 1;
 }
 .nav .nav-account { padding: 6px 0; }
+/* header bag icon — plain icon like the account icon, with a small count badge */
+.nav-bag {
+  position: relative; background: none; border: 0; cursor: pointer; color: inherit;
+  padding: 6px 0; display: inline-flex; align-items: center;
+  transition: color .2s ease;
+}
+.nav-bag:hover { color: var(--rust); }
+.nav.clear:not(.solid) .nav-bag:hover { color: var(--cream); }
+.nav-bag-count {
+  position: absolute; top: -1px; right: -8px;
+  min-width: 17px; height: 17px; padding: 0 4px;
+  border-radius: 999px; background: var(--rust); color: #fff;
+  font-size: 10px; line-height: 17px; text-align: center; font-weight: 600;
+}
 
-/* footer logo — same brown mark, sized up */
-.foot .brand, .footer .brand { padding-top: 0; }
-.foot .brand-logo, .footer .brand-logo { height: 54px; margin: 0 auto; }
-.foot .brand-tag, .footer .brand-tag { font-size: 10.5px; letter-spacing: .5em; color: var(--rust); opacity: .9; margin-top: 8px; }
+/* footer logo — same brown mark, sized up; the block is centered so the logo sits
+   directly above the tagline (both stacked + centred) */
+.foot .brand, .footer .brand { padding-top: 0; text-align: center; }
+.foot .brand-logo, .footer .brand-logo { height: 54px; margin: 0 auto 8px; }
+.foot .brand-tag, .footer .brand-tag { font-size: 10.5px; letter-spacing: .5em; color: var(--rust); opacity: .9; }
 
 /* give the bigger logo room to breathe without clipping it */
 .nav.solid .nav-inner { height: 80px; }
