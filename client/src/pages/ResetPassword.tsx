@@ -22,32 +22,41 @@ export default function ResetPassword() {
     if (!hasSupabase || ran.current) return
     ran.current = true
 
-    // PKCE-style recovery link (?code=…): the Supabase client sets up the recovery session on its
-    // own via detectSessionInUrl. Watch for the PASSWORD_RECOVERY event and offer the form then.
+    // Kridhya pattern: a reset link that already set up a recovery session on its own
+    // (detectSessionInUrl / the PASSWORD_RECOVERY event) — offer the form straight away.
     const stopRecovery = onPasswordRecovery(() => {
       getUser()
         .then((u) => { if (u?.email) { setEmail(u.email); setStage('set') } })
-        .catch(() => { /* the explicit path below still handles it */ })
+        .catch(() => { /* the flow below still handles it */ })
     })
 
-    const link = linkFromUrl()
-    if (link.tokenHash && link.type === 'recovery') {
-      verifyEmailLink(link.tokenHash, 'recovery')
-        .then((u) => {
+    ;(async () => {
+      const link = linkFromUrl()
+      // (1) explicit link: verify the recovery token_hash (implicit flow, works in any browser).
+      if (link.tokenHash && link.type === 'recovery') {
+        try {
+          const u = await verifyEmailLink(link.tokenHash, 'recovery')
           setEmail(u?.email || '')
           setStage('set')
-        })
-        .catch(() => setStage('expired')) // expired / already used → offer a fresh link
-    } else {
-      // PKCE link or same-browser link: the recovery session is set up by detectSessionInUrl / the
-      // PASSWORD_RECOVERY event above; fall back to reading the session directly.
-      getUser()
-        .then((u) => {
-          if (u?.email) { setEmail(u.email); setStage('set') }
-          else setStage('expired') // no link, no session → let them request a fresh one
-        })
-        .catch(() => setStage('expired'))
-    }
+          return
+        } catch {
+          // With detectSessionInUrl the token is already consumed on load — fall through and
+          // read the recovery session instead. This is the fix for "clicking the link logs me
+          // in but the reset form never shows."
+        }
+      }
+      // (2) PKCE link (?code=…) or same-browser link: the session is set up automatically, so
+      // the signed-in user IS the recovery user — offer the form directly.
+      const u = await getUser()
+      if (u?.email) {
+        setEmail(u.email)
+        setStage('set')
+      } else {
+        // (3) no link, no session, no recovery event: genuinely not a recovery context → fresh link.
+        setStage('expired')
+      }
+    })()
+
     return () => stopRecovery()
   }, [])
 

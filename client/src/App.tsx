@@ -1,5 +1,5 @@
 import { Routes, Route, useLocation, useNavigate } from 'react-router-dom'
-import { useEffect } from 'react'
+import { useEffect, lazy, Suspense } from 'react'
 import { CartProvider } from './context/CartContext'
 import { AuthProvider } from './context/AuthContext'
 import { linkFromUrl } from './lib/auth'
@@ -7,18 +7,38 @@ import Nav from './components/Nav'
 import AuthToast from './components/AuthToast'
 import Footer from './components/Footer'
 import CartDrawer from './components/CartDrawer'
-import Home from './pages/Home'
-import Shop from './pages/Shop'
-import Product from './pages/Product'
-import Checkout from './pages/Checkout'
-import Cart from './pages/Cart'
-import OrderSuccess from './pages/OrderSuccess'
-import Account from './pages/Account'
-import ResetPassword from './pages/ResetPassword'
-import OrderDetail from './pages/OrderDetail'
-import Contact from './pages/Contact'
-import Admin from './pages/Admin'
-import NotFound from './pages/NotFound'
+
+// Route-level code splitting: the initial page only pays for its own route.
+// Vercel serves every SPA path from the same build, so a missing chunk
+// (first visit to a route on a long-deployed CDN edge) fails gracefully
+// into the spinner below — and the spinner's chunk is the very first
+// one the browser fetches, so it can always load.
+const Home = lazy(() => import('./pages/Home'))
+const Shop = lazy(() => import('./pages/Shop'))
+const Product = lazy(() => import('./pages/Product'))
+const Checkout = lazy(() => import('./pages/Checkout'))
+const Cart = lazy(() => import('./pages/Cart'))
+const OrderSuccess = lazy(() => import('./pages/OrderSuccess'))
+const Account = lazy(() => import('./pages/Account'))
+const ResetPassword = lazy(() => import('./pages/ResetPassword'))
+const OrderDetail = lazy(() => import('./pages/OrderDetail'))
+const Contact = lazy(() => import('./pages/Contact'))
+const Admin = lazy(() => import('./pages/Admin'))
+const NotFound = lazy(() => import('./pages/NotFound'))
+
+function RouteFallback() {
+  return (
+    <div className="page store" style={{ minHeight: '50vh' }}>
+      <div className="wrap" style={{ display: 'grid', placeItems: 'center', padding: '96px 0 140px' }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ width: 30, height: 30, margin: '0 auto', border: '2px solid var(--rust)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin .8s linear infinite' }} />
+          <p style={{ marginTop: 14, fontSize: 13, color: 'var(--muted, #8a8578)' }}>Loading…</p>
+        </div>
+        <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
+      </div>
+    </div>
+  )
+}
 
 export default function App() {
   const { pathname, hash } = useLocation()
@@ -73,6 +93,7 @@ export default function App() {
     <AuthProvider>
       <CartProvider>
         {showNav && <Nav />}
+        <Suspense fallback={<RouteFallback />}>
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/shop" element={<Shop />} />
@@ -87,6 +108,7 @@ export default function App() {
           <Route path="/admin" element={<Admin />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
+        </Suspense>
         {showFooter && <Footer />}
         <CartDrawer />
         <AuthToast />

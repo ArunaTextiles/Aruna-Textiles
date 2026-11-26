@@ -117,29 +117,33 @@ export default function Account() {
   return (
     <div className="page store">
       <div className="wrap">
-        <div style={{ padding: '26px 0 6px' }}>
+        <div style={{ padding: '24px 0 0' }}>
           <span className="store-eyebrow">My Account</span>
-          <h1 className="store-title" style={{ fontSize: 36 }}>Hello, {first || 'there'}.</h1>
+          <h1 className="store-title" style={{ fontSize: 34 }}>Hello, {first || 'there'}.</h1>
         </div>
 
-        <div className="acct">
-          <aside className="acct-side">
-            <div className="acct-user">
+        <div className="acct-wrap">
+          {/* identity bar: who you are + quick actions, one compact strip on all screen sizes */}
+          <div className="acct-bar">
+            <div className="acct-ident">
               <div className="acct-ava">{(first || '?')[0].toUpperCase()}</div>
               <div style={{ minWidth: 0 }}>
                 <b>{user.name?.split(' ')[0] || 'Your account'}</b>
                 <span>{user.email}</span>
               </div>
             </div>
-            <nav className="acct-menu">
-              <button className={tab === 'orders' ? 'on' : ''} onClick={() => setTab('orders')}><Ico d="M3 7h18M3 12h18M3 17h12" /> My Orders</button>
-              <button className={tab === 'profile' ? 'on' : ''} onClick={() => setTab('profile')}><Ico d="M12 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10zM3 22a9 9 0 0 1 18 0" /> Profile</button>
-              <button onClick={() => nav('/shop')}><Ico d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3 6h18" /> Continue shopping</button>
-              <button className="signout" onClick={() => signOut().catch(() => {})}><Ico d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" /> Sign out</button>
-            </nav>
-          </aside>
+            <div className="acct-bar-actions">
+              <button className="s-btn ghost sm" onClick={() => nav('/shop')}>Continue shopping</button>
+              <button className="s-btn ghost sm" onClick={() => signOut().catch(() => {})}>Sign out</button>
+            </div>
+          </div>
 
-          <div>
+          <div className="acct-tabs" role="tablist" aria-label="Account sections">
+            <button role="tab" aria-selected={tab === 'orders'} className={tab === 'orders' ? 'on' : ''} onClick={() => setTab('orders')}>My Orders</button>
+            <button role="tab" aria-selected={tab === 'profile'} className={tab === 'profile' ? 'on' : ''} onClick={() => setTab('profile')}>Profile</button>
+          </div>
+
+          <div className="acct-panel">
             {tab === 'orders' ? (
               <>
                 <div className="ord-tabs">
@@ -163,7 +167,7 @@ export default function Account() {
                 )}
               </>
             ) : (
-              <Profile user={user} onName={(n) => { saveUserName(n).then(() => setUser({ ...user, name: n })).catch(() => {}) }} onSignOut={() => signOut().catch(() => {})} onBrowse={() => nav('/shop')} />
+              <Profile user={user} onName={(n) => { saveUserName(n).then(() => setUser({ ...user, name: n })).catch(() => {}) }} />
             )}
           </div>
         </div>
@@ -172,12 +176,10 @@ export default function Account() {
   )
 }
 
-// ── Profile: editable name + sign out, in the same card style ──
-function Profile({ user, onName, onSignOut, onBrowse }: {
+// ── Profile: editable name, compact card under the tab ──
+function Profile({ user, onName }: {
   user: { email: string; name?: string }
   onName: (n: string) => void
-  onSignOut: () => void
-  onBrowse: () => void
 }) {
   const [name, setName] = useState(user.name || '')
   const [saving, setSaving] = useState(false)
@@ -194,21 +196,17 @@ function Profile({ user, onName, onSignOut, onBrowse }: {
 
   return (
     <div className="acct-card">
-      <div className="acct-card-row">
-        <div className="acct-card-head"><h2>Profile</h2><span className="muted" style={{ fontSize: 13 }}>{user.email}</span></div>
-        <div style={{ flex: 1, maxWidth: 360 }}>
-          <label className="co-field"><span className="co-lbl">Full name</span>
-            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Your full name" /></label>
-          {err && <p className="co-err" style={{ marginTop: 6 }}>{err}</p>}
-          <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
-            <button className="s-btn sm" onClick={save} disabled={saving || !name.trim()}>{saved ? 'Saved ✓' : saving ? 'Saving…' : 'Save'}</button>
-            <button className="s-btn ghost sm" onClick={onBrowse}>Continue shopping</button>
-          </div>
-        </div>
+      <div className="acct-card-head" style={{ marginBottom: 16 }}>
+        <h2>Profile</h2>
+        <span className="muted" style={{ fontSize: 13 }}>Signed in as {user.email}</span>
       </div>
-      <div className="acct-card-row" style={{ borderTop: '1px solid var(--edge)' }}>
-        <div className="acct-card-head"><h2>Session</h2><span className="muted" style={{ fontSize: 13 }}>Signed in as {user.email}</span></div>
-        <button className="s-btn ghost sm" onClick={onSignOut}>Sign out</button>
+      <div style={{ display: 'grid', gap: 16, maxWidth: 420 }}>
+        <label className="co-field" style={{ marginBottom: 0 }}><span className="co-lbl">Full name</span>
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Your full name" /></label>
+        {err && <p className="co-err">{err}</p>}
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <button className="s-btn sm" onClick={save} disabled={saving || !name.trim()}>{saved ? 'Saved ✓' : saving ? 'Saving…' : 'Save'}</button>
+        </div>
       </div>
     </div>
   )
@@ -268,7 +266,3 @@ function badgeClass(s: string) {
   if (['placed', 'confirmed', 'packed'].includes(s)) return 'amber'
   return ''
 }
-
-const Ico = ({ d }: { d: string }) => (
-  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d={d} /></svg>
-)

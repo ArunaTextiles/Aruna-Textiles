@@ -134,6 +134,10 @@ export default function Checkout() {
       return
     }
 
+    // local order skeleton (prices from the server override these later) — this is
+    // the `base` the Kridhya flow spreads when it finishes, so it's always defined.
+    const base = makeOrder('', false)
+
     setPlacing(true)
     try {
       // 1) try the real order service (prices/stock/razorpay all server-authoritative)
