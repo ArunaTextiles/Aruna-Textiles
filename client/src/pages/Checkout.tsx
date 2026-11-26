@@ -121,18 +121,29 @@ export default function Checkout() {
     setPlacing(true)
     try {
       // 1) try the real order service (prices/stock/razorpay all server-authoritative)
-      const res = await fetch('/api/checkout', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          customer: { name: form.name, email: form.email, phone: form.phone },
-          address: form,
-          payment,
-          items: bagItems,
-          note: '',
-          coupon: applied || undefined,
-        }),
-      })
+      //    with a hard timeout — if the API hangs, fail fast into the fallback below
+      //    instead of sitting on "Preparing…" forever.
+      const ctrl = new AbortController()
+      const t = setTimeout(() => ctrl.abort(), 25000)
+      let res: Response
+      try {
+        res = await fetch('/api/checkout', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            customer: { name: form.name, email: form.email, phone: form.phone },
+            address: form,
+            payment,
+            items: bagItems,
+            note: '',
+            coupon: applied || undefined,
+          }),
+          signal: ctrl.signal,
+        })
+      } finally {
+        clearTimeout(t)
+      }
+      if (ctrl.signal.aborted) throw new Error('The order service took too long to respond.')
       const body = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`)
 
