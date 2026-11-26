@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { getUser, linkFromUrl, verifyEmailLink, setNewPassword, signOut, sendPasswordReset } from '../lib/auth'
+import { getUser, linkFromUrl, verifyEmailLink, setNewPassword, sendPasswordReset, onPasswordRecovery } from '../lib/auth'
 import { hasSupabase } from '../lib/supabase'
+import { passwordProblem } from '../lib/auth'
 
 type Stage = 'checking' | 'set' | 'done' | 'expired'
 
-// Lands from the "Reset your password" email: any page with ?token_hash=…&type=recovery is
-// routed here by App.tsx. Verifies the link, then lets the user choose a new password.
-// Kridhya pattern: a used/expired link can be replaced on the spot with a fresh one.
+// Lands from the "Reset your password" email: any page with ?token_hash=…&type=recovery (implicit
+// flow) or ?code=…&type=recovery (PKCE) is routed here by App.tsx. Verifies the link, then lets
+// the user choose a new password. Kridhya pattern: a used/expired link can be replaced on the spot.
 export default function ResetPassword() {
   const [stage, setStage] = useState<Stage>('checking')
   const [msg, setMsg] = useState('')
@@ -20,17 +21,26 @@ export default function ResetPassword() {
   useEffect(() => {
     if (!hasSupabase || ran.current) return
     ran.current = true
+
+    // PKCE-style recovery link (?code=…): the Supabase client sets up the recovery session on its
+    // own via detectSessionInUrl. Watch for the PASSWORD_RECOVERY event and offer the form then.
+    const stopRecovery = onPasswordRecovery(() => {
+      getUser()
+        .then((u) => { if (u?.email) { setEmail(u.email); setStage('set') } })
+        .catch(() => { /* the explicit path below still handles it */ })
+    })
+
     const link = linkFromUrl()
     if (link.tokenHash && link.type === 'recovery') {
-      verifyEmailLink(link.tokenHash, link.type)
+      verifyEmailLink(link.tokenHash, 'recovery')
         .then((u) => {
           setEmail(u?.email || '')
           setStage('set')
         })
         .catch(() => setStage('expired')) // expired / already used → offer a fresh link
     } else {
-      // Kridhya fallback: same-browser links can set up the recovery session on their own
-      // (detectSessionInUrl), in which case we can offer the form directly.
+      // PKCE link or same-browser link: the recovery session is set up by detectSessionInUrl / the
+      // PASSWORD_RECOVERY event above; fall back to reading the session directly.
       getUser()
         .then((u) => {
           if (u?.email) { setEmail(u.email); setStage('set') }
@@ -38,18 +48,18 @@ export default function ResetPassword() {
         })
         .catch(() => setStage('expired'))
     }
+    return () => stopRecovery()
   }, [])
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (pw.password.length < 8) return setMsg('Use at least 8 characters.')
-    if (!/[A-Za-z]/.test(pw.password) || !/\d/.test(pw.password)) return setMsg('Use both letters and numbers.')
+    const p = passwordProblem(pw.password)
+    if (p) return setMsg(p)
     if (pw.password !== pw.confirm) return setMsg('The two passwords don’t match.')
     setBusy(true); setMsg('')
     try {
       await setNewPassword(pw.password)
       setStage('done')
-      signOut().catch(() => {})
     } catch (e) {
       setMsg(e instanceof Error ? e.message : 'Could not set the new password just now. Try again.')
     } finally { setBusy(false) }

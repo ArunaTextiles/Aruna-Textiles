@@ -26,11 +26,22 @@ export default function App() {
 
   // Kridhya-style global handler: a recovery (password-reset) email link must reach the
   // reset flow no matter which page its base URL lands on — the SPA serves every path,
-  // so redirect anywhere→/account/reset preserving the token_hash in the query.
+  // so redirect anywhere→/account/reset preserving the link params. This covers both
+  // Supabase's implicit flow (?token_hash=…) and PKCE flow (?code=…) recovery links,
+  // keyed off type=recovery so it works either way.
   useEffect(() => {
-    const l = linkFromUrl()
-    if (l.tokenHash && l.type === 'recovery' && !pathname.startsWith('/account/reset')) {
-      navigate({ pathname: '/account/reset', search: `?type=recovery&token_hash=${encodeURIComponent(l.tokenHash)}` }, { replace: true })
+    const q = new URLSearchParams(window.location.search)
+    const h = new URLSearchParams(window.location.hash.replace(/^#/, ''))
+    const type = q.get('type') || h.get('type')
+    const link = linkFromUrl()
+    const isRecovery = type === 'recovery' && (link.tokenHash || q.get('code') || h.get('code'))
+    if (isRecovery && !pathname.startsWith('/account/reset')) {
+      const search = new URLSearchParams()
+      if (type) search.set('type', type)
+      if (link.tokenHash) search.set('token_hash', link.tokenHash)
+      const c = q.get('code') || h.get('code')
+      if (c) search.set('code', c)
+      navigate({ pathname: '/account/reset', search: `?${search.toString()}` }, { replace: true })
     }
   }, [pathname, navigate])
 

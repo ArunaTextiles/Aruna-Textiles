@@ -70,21 +70,9 @@ export default function SignIn({
     if (mode === 'signin') {
       if (!f.password) return setError('Enter your password.')
       return attempt(async () => {
-        try {
-          done(await signInWithPassword(f.email, f.password))
-        } catch (err) {
-          const m = err instanceof Error ? err.message : ''
-          if (m.startsWith('We couldn’t sign you in')) {
-            // No matching account / password (Supabase never says which): hand off to sign-up
-            // carrying over email + password — Kridhya pattern: the user only adds their name.
-            go('signup')
-            setF((x) => ({ ...x, confirm: '' }))
-            setNotice(`We couldn’t sign in with ${f.email.trim()} — no account yet, or the password doesn’t match. If you’re new here, we’ve carried over your email and password: just add your name to create the account.`)
-            return
-          }
-          if (m.startsWith('Please confirm your email')) throw err // handled below by the resend button
-          throw err
-        }
+        // Kridhya pattern: a failed sign-in stays on the sign-in screen and offers the next
+        // steps (create account / reset password / one-time code) rather than auto-switching.
+        done(await signInWithPassword(f.email, f.password))
       })
     }
     if (mode === 'signup') {
@@ -212,6 +200,18 @@ export default function SignIn({
           )}
 
           {error && <p role="alert" className="auth-error">{error}</p>}
+
+          {/* wrong password OR no account yet - Supabase never says which (privacy), so offer the next steps */}
+          {mode === 'signin' && error.startsWith('We couldn’t sign you in') && (
+            <div className="auth-help">
+              <p>Check the email and password, or choose what fits:</p>
+              <div className="auth-help-actions">
+                <button type="button" onClick={() => { go('signup'); setF((x) => ({ ...x, confirm: '' })) }}>New here? Create an account</button>
+                <button type="button" onClick={() => go('forgot')}>Reset my password</button>
+              </div>
+              <button type="button" onClick={() => go('code')}>Or sign in with a one-time code by email</button>
+            </div>
+          )}
 
           {error.startsWith('Please confirm your email') && (
             <button type="button" disabled={busy || cooldown > 0}

@@ -1,0 +1,96 @@
+{
+  "version": 2,
+  "skills": {
+    "breadboard-reflection": {
+      "source": "almeidamarcell/claude-code-skills",
+      "commit": "d9b456106d1016b6caeb3eaf036bbc972fa0286d",
+      "sourceType": "github",
+      "skillPath": "breadboard-reflection/SKILL.md",
+      "computedHash": "bef900a8a8dcb8039b250ac1153f0d8540062832ae3b550454d7001a8cec661a"
+    },
+    "breadboarding": {
+      "source": "almeidamarcell/claude-code-skills",
+      "commit": "d9b456106d1016b6caeb3eaf036bbc972fa0286d",
+      "sourceType": "github",
+      "skillPath": "breadboarding/SKILL.md",
+      "computedHash": "3d953f59ad1a650ca2fef68dd5761999c157353861eff8d07d8095c622ee5818"
+    },
+    "cheap-model-testing": {
+      "source": "almeidamarcell/claude-code-skills",
+      "commit": "d9b456106d1016b6caeb3eaf036bbc972fa0286d",
+      "sourceType": "github",
+      "skillPath": "cheap-model-testing/SKILL.md",
+      "computedHash": "94cf83663252007eb312a74e28d6e65627eedc3c44dbe6af934e9810a030251e"
+    },
+    "clearshot": {
+      "source": "almeidamarcell/claude-code-skills",
+      "commit": "d9b456106d1016b6caeb3eaf036bbc972fa0286d",
+      "sourceType": "github",
+      "skillPath": "clearshot/SKILL.md",
+      "computedHash": "6ee6f921030d727a91437b2b60aedfc6b95f55614cf78f571f3ea8bd3ad98472"
+    },
+    "framing-doc": {
+      "source": "almeidamarcell/claude-code-skills",
+      "commit": "d9b456106d1016b6caeb3eaf036bbc972fa0286d",
+      "sourceType": "github",
+      "skillPath": "framing-doc/SKILL.md",
+      "computedHash": "05375fb1ca59d64789d2e781da673f7959004dbf29a761059c4d16f218e2df65"
+    },
+    "gstack": {
+      "source": "almeidamarcell/claude-code-skills",
+      "commit": "d9b456106d1016b6caeb3eaf036bbc972fa0286d",
+      "sourceType": "github",
+      "skillPath": "gstack/SKILL.md",
+      "computedHash": "7e5fe51185837f8a9e4fd7830ba21edc5f69d4437434c854ac399c7d4473fd9f"
+    },
+    "humanizador": {
+      "source": "almeidamarcell/claude-code-skills",
+      "commit": "d9b456106d1016b6caeb3eaf036bbc972fa0286d",
+      "sourceType": "github",
+      "skillPath": "humanizador/SKILL.md",
+      "computedHash": "1ba07dcc93862f7907bc84e530211d5f1f50619af4d65f40ecd22f0f2175ecf6"
+    },
+    "humanizer": {
+      "source": "almeidamarcell/claude-code-skills",
+      "commit": "d9b456106d1016b6caeb3eaf036bbc972fa0286d",
+      "sourceType": "github",
+      "skillPath": "humanizer/SKILL.md",
+      "computedHash": "77385ad28ab9bdaea44fbb54c02918b4fd25d40bcb7244766fdd4a52cb262f8c"
+    },
+    "kickoff-doc": {
+      "source": "almeidamarcell/claude-code-skills",
+      "commit": "d9b456106d1016b6caeb3eaf036bbc972fa0286d",
+      "sourceType": "github",
+      "skillPath": "kickoff-doc/SKILL.md",
+      "computedHash": "7bd49d9a55926651156facbaaaae50fe6ea176a593c612c43ce38eefb7e48155"
+    },
+    "safe-deploy": {
+      "source": "almeidamarcell/claude-code-skills",
+      "commit": "d9b456106d1016b6caeb3eaf036bbc972fa0286d",
+      "sourceType": "github",
+      "skillPath": "safe-deploy/SKILL.md",
+      "computedHash": "35eedca2726b685d57b8ad06f84bed3f96f83102053d53fa0a3a65d602b4941b"
+    },
+    "shaping": {
+      "source": "almeidamarcell/claude-code-skills",
+      "commit": "d9b456106d1016b6caeb3eaf036bbc972fa0286d",
+      "sourceType": "github",
+      "skillPath": "shaping/SKILL.md",
+      "computedHash": "4f1d0ac7b256a8b63ba68556d94b44aa63c4a0065bb212e5029299d2cb50e381"
+    },
+    "social-assets-factory": {
+      "source": "almeidamarcell/claude-code-skills",
+      "commit": "d9b456106d1016b6caeb3eaf036bbc972fa0286d",
+      "sourceType": "github",
+      "skillPath": "social-assets-factory/SKILL.md",
+      "computedHash": "b4fc1651cbb037fab36656b2062ed28f9adf04eb86964405bf1d719a16d81e1c"
+    },
+    "test-driven-development": {
+      "source": "almeidamarcell/claude-code-skills",
+      "commit": "d9b456106d1016b6caeb3eaf036bbc972fa0286d",
+      "sourceType": "github",
+      "skillPath": "tdd/SKILL.md",
+      "computedHash": "a870b9e170a513e168b73ba4a5a8ff50c4a1d120ad3de320986bb76d7d801049"
+    }
+  }
+}

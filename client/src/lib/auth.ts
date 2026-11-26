@@ -113,6 +113,15 @@ export async function verifyEmailLink(tokenHash: string, type: string) {
   return data.user
 }
 
+// fires a callback when the visitor arrives from a reset-password email (PASSWORD_RECOVERY),
+// matching the Kridhya pattern so a PKCE recovery link that sets up the session on its own is caught.
+export function onPasswordRecovery(cb: () => void) {
+  if (!hasSupabase) return () => {}
+  const sb = supabase()
+  const { data } = sb.auth.onAuthStateChange((e) => e === 'PASSWORD_RECOVERY' && cb())
+  return () => data.subscription.unsubscribe()
+}
+
 export async function signOut() {
   const sb = supabase()
   await sb.auth.signOut()

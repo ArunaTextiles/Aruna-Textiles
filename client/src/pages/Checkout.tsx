@@ -28,14 +28,19 @@ export default function Checkout() {
   const [payment, setPayment] = useState<'online' | 'cod'>('online')
   const [placing, setPlacing] = useState(false)
   const [fail, setFail] = useState('')
+  const [errors, setErrors] = useState<Record<string, string>>({})
   const [pinInfo, setPinInfo] = useState<{ found: boolean; city?: string; state?: string } | null>(null)
   const [coupon, setCoupon] = useState<string>(() => sessionStorage.getItem('aruna-coupon') || '')
   const [applied, setApplied] = useState<string>(() => sessionStorage.getItem('aruna-coupon') || '')
   const [couponMsg, setCouponMsg] = useState<{ text: string; ok: boolean } | null>(null)
   const [ship, setShip] = useState(DEFAULT_STORE)
 
-  const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) => setForm((f) => ({ ...f, [k]: e.target.value }))
+  const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) => {
+    setForm((f) => ({ ...f, [k]: e.target.value }))
+    setErrors((er) => (er[k] ? { ...er, [k]: '' } : er)) // typing in a flagged field clears its error
+  }
   const pin = form.pin.trim()
+  const errFor = (k: string) => (errors[k] ? <span role="alert" style={{ display: 'block', fontSize: 12, color: '#a02c1d', marginTop: 4 }}>{errors[k]}</span> : null)
 
   // live store config (shipping fee + free threshold) so the displayed total matches the server's charge
   useEffect(() => { storeConfig().then(setShip) }, [])
@@ -113,9 +118,20 @@ export default function Checkout() {
   const submit = async (e: FormEvent) => {
     e.preventDefault()
     setFail('')
-    const base = makeOrder('', false)
-    if (!/^\S+@\S+\.\S+$/.test(form.email) || form.phone.replace(/\D/g, '').length < 10 || !/^\d{6}$/.test(pin)) {
-      return setFail('Please complete your details (valid email, 10-digit phone, 6-digit PIN).')
+    // Kridhya-style per-field validation: each required field gets its own message,
+    // and the first invalid input is focused so the shopper knows exactly what to fix.
+    const err: Record<string, string> = {}
+    if (!form.name.trim()) err.name = 'Please enter your full name.'
+    if (!/^\S+@\S+\.\S+$/.test(form.email)) err.email = 'Please enter a valid email address.'
+    if (form.phone.replace(/\D/g, '').length < 10) err.phone = 'Please enter a 10-digit phone number.'
+    if (!form.address.trim()) err.address = 'Please enter your address.'
+    if (!form.city.trim()) err.city = 'Please enter your city.'
+    if (!form.state.trim()) err.state = 'Please enter your state.'
+    if (!/^\d{6}$/.test(pin)) err.pin = 'Please enter a 6-digit PIN code.'
+    setErrors(err)
+    if (Object.keys(err).length) {
+      document.getElementById(`co-${Object.keys(err)[0]}`)?.focus()
+      return
     }
 
     setPlacing(true)

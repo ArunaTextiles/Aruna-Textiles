@@ -133,19 +133,22 @@ export default function ProductPage() {
 
             <div className="pdp-cta">
               <div className="pdp-cta-row">
-                <button className="cta-primary" onClick={doAdd}>
-                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3 6h18M16 10a4 4 0 0 1-8 0" /></svg>
-                  {added ? 'Added to Cart' : 'Add to Cart'}
+                <button className="cta-primary" onClick={doAdd} aria-label="Add to cart">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3 6h18M16 10a4 4 0 0 1-8 0" /></svg>
+                  {added ? 'Added' : 'Add to Cart'}
                 </button>
-                <button className={`cta-icon ${wish ? 'on' : ''}`} onClick={toggleWish} aria-label="Save to wishlist" aria-pressed={wish}>
-                  <svg viewBox="0 0 24 24"><path d="M12 21s-7-4.5-9.5-9C1 8.5 2.5 5 6 5c2 0 3.5 1.5 6 4 2.5-2.5 4.5-4 6.5-4 3.5 0 4.5 3.5 3.5 7-2.5 4.5-10 9-10 9z" /></svg>
+                <button className="cta-buy" onClick={buyNow} aria-label="Buy now">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" aria-hidden="true"><path d="M13 2 3 14h7l-1 8 10-12h-7z" /></svg>
+                  Buy Now
                 </button>
               </div>
-              <button className="cta-buy" onClick={buyNow}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9"><path d="M13 2 3 14h7l-1 8 10-12h-7z" /></svg>
-                Buy Now
-              </button>
-              <button className="cta-view" onClick={() => setOpen(true)}>View your bag <span aria-hidden="true">→</span></button>
+              <div className="pdp-cta-sub">
+                <button className={`cta-wish ${wish ? 'on' : ''}`} onClick={toggleWish} aria-pressed={wish}>
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7-4.5-9.5-9C1 8.5 2.5 5 6 5c2 0 3.5 1.5 6 4 2.5-2.5 4.5-4 6.5-4 3.5 0 4.5 3.5 3.5 7-2.5 4.5-10 9-10 9z" /></svg>
+                  {wish ? 'Saved' : 'Save'}
+                </button>
+                <button className="cta-view" onClick={() => setOpen(true)}>View your bag <span aria-hidden="true">→</span></button>
+              </div>
             </div>
 
             <div className="pdp-trust">
