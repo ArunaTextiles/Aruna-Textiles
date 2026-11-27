@@ -10,9 +10,10 @@ import { lookupPin } from '../lib/pincode'
 import { storeConfig, DEFAULT_STORE } from '../lib/storeConfig'
 import { rememberOrder, placeOrderDirect } from '../lib/account'
 import SignIn from '../components/SignIn'
-import type { Order, Product } from '../lib/types'
+import type { Order } from '../lib/types'
 
-// The friendly message map from the reference checkout (Kridhya).
+// Friendly error copy (the Kridhya reference). Every failure message is honest:
+// an order the service created is a real held order; nothing is ever faked.
 const friendly = (m = '') =>
   m.startsWith('OUT_OF_STOCK:') ? `Sorry — ${m.slice(13).split('|')[0]} has just sold out. Please update your bag.`
     : m.startsWith('UNAVAILABLE:') ? `Sorry — ${m.slice(12)} is no longer available. Please remove it from your bag.`
@@ -23,9 +24,9 @@ export default function Checkout() {
   const { items, clear } = useCart()
   const { user, ready, setUser } = useAuth()
   const nav = useNavigate()
-  const [step, setStep] = useState(1)
+  // One single form — no steps, no progress. Contact → address → payment, submitted together.
   const [form, setForm] = useState({ name: '', email: '', phone: '', address: '', address2: '', city: '', state: '', pin: '' })
-  const [payment, setPayment] = useState<'online' | 'cod'>('online')
+  const [payment, setPayment] = useState<'online' | 'cod'>(() => (DEFAULT_STORE.onlinePayments ? 'online' : 'cod'))
   const [placing, setPlacing] = useState(false)
   const [fail, setFail] = useState('')
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -42,8 +43,15 @@ export default function Checkout() {
   const pin = form.pin.trim()
   const errFor = (k: string) => (errors[k] ? <span role="alert" style={{ display: 'block', fontSize: 12, color: '#a02c1d', marginTop: 4 }}>{errors[k]}</span> : null)
 
-  // live store config (shipping fee + free threshold) so the displayed total matches the server's charge
-  useEffect(() => { storeConfig().then(setShip) }, [])
+  // live store config (shipping fee + free threshold + which payment methods are on),
+  // so the displayed total and the payment options always match the server
+  useEffect(() => {
+    storeConfig().then((c) => {
+      setShip(c)
+      setPayment((p) => (p === 'online' && !c.onlinePayments ? (c.cod ? 'cod' : 'online') : p))
+      setPayment((p) => (p === 'cod' && !c.cod ? (c.onlinePayments ? 'online' : 'cod') : p))
+    })
+  }, [])
 
   // prefill from the signed-in user
   useEffect(() => {
@@ -91,7 +99,7 @@ export default function Checkout() {
 
   const bagItems = items.map((i) => ({ productSlug: i.product.slug, name: i.product.name, technique: i.product.technique, size: i.size, qty: i.qty, price: i.product.price, image: i.product.image }))
 
-  const makeOrder = (id: string, tracked: boolean): Order => ({
+  const makeOrder = (id: string): Order => ({
     id,
     orderNo: id,
     status: payment === 'cod' ? 'placed' : 'awaiting_payment',
@@ -115,6 +123,12 @@ export default function Checkout() {
     nav(`/checkout/success?order=${encodeURIComponent(o.orderNo)}&method=${o.paymentMethod}`)
   }
 
+  const payOptions = [
+    ship.onlinePayments && { id: 'online' as const, label: 'Pay online', hint: 'UPI, cards, net banking and wallets — secured by Razorpay' },
+    ship.cod && { id: 'cod' as const, label: 'Cash on Delivery', hint: 'Pay when your rug arrives' },
+  ].filter(Boolean) as { id: 'online' | 'cod'; label: string; hint: string }[]
+  const payOn = (id: 'online' | 'cod') => payOptions.some((o) => o.id === id)
+
   const submit = async (e: FormEvent) => {
     e.preventDefault()
     setFail('')
@@ -136,13 +150,13 @@ export default function Checkout() {
 
     // local order skeleton (prices from the server override these later) — this is
     // the `base` the Kridhya flow spreads when it finishes, so it's always defined.
-    const base = makeOrder('', false)
+    const base = makeOrder('')
 
     setPlacing(true)
     try {
-      // 1) try the real order service (prices/stock/razorpay all server-authoritative)
-      //    with a hard timeout — if the API hangs, fail fast into the fallback below
-      //    instead of sitting on "Preparing…" forever.
+      // 1) the real order service (prices/stock/razorpay all server-authoritative)
+      //    with a hard timeout — if the API hangs, fail fast instead of sitting on
+      //    "Preparing…" forever.
       const ctrl = new AbortController()
       const t = setTimeout(() => ctrl.abort(), 25000)
       let res: Response
@@ -152,10 +166,10 @@ export default function Checkout() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             customer: { name: form.name, email: form.email, phone: form.phone },
-            address: form,
-            payment,
+            address: { line1: form.address, line2: form.address2, city: form.city, state: form.state, pin },
             items: bagItems,
             note: '',
+            payment,
             coupon: applied || undefined,
           }),
           signal: ctrl.signal,
@@ -214,7 +228,7 @@ export default function Checkout() {
         try {
           const orderNo = await placeOrderDirect({
             customer: { name: form.name, email: form.email, phone: form.phone },
-            address: form,
+            address: { line1: form.address, line2: form.address2, city: form.city, state: form.state, pin },
             items: bagItems.map((i) => ({ slug: i.productSlug, size: i.size, qty: i.qty })),
             note: '',
             payment: 'cod',
@@ -254,9 +268,6 @@ export default function Checkout() {
     )
   }
 
-  const stepDone = (n: number) => step > n
-  const steps: [number, string][] = [[1, 'Details'], [2, 'Address'], [3, 'Delivery'], [4, 'Payment'], [5, 'Review']]
-
   return (
     <div className="page store">
       <div className="wrap co-page">
@@ -270,76 +281,61 @@ export default function Checkout() {
           </div>
         ) : (
           <form onSubmit={submit} noValidate>
-            {/* stepper */}
-            <div className="co-stepper" aria-hidden="true">
-              {steps.map(([n, l], i) => (
-                <div key={n} style={{ display: 'flex', alignItems: 'center', flex: i < steps.length - 1 ? 1 : 'none' }}>
-                  <span className={`co-step ${step === n ? 'on' : ''} ${stepDone(n) ? 'done' : ''}`}>
-                    <span className="dot">{stepDone(n) ? '✓' : n}</span>{l}
-                  </span>
-                  {i < steps.length - 1 && <span className="co-line" />}
-                </div>
-              ))}
-            </div>
-
             <div className="co-grid">
               <div>
-                {/* 01 · customer */}
+                {/* contact */}
                 <section className="co-card">
                   <h3><b style={{ color: 'var(--rust)' }}>01</b> Customer Information</h3>
                   <div className="co-2col">
-                    <div className="co-field"><label>Full Name *</label><input required value={form.name} onChange={set('name')} autoComplete="name" /></div>
-                    <div className="co-field"><label>Mobile Number *</label><input required type="tel" value={form.phone} onChange={set('phone')} placeholder="+91 98765 43210" autoComplete="tel" /></div>
+                    <div className="co-field"><label htmlFor="co-name">Full Name *</label><input id="co-name" required value={form.name} onChange={set('name')} autoComplete="name" aria-invalid={!!errors.name} />{errFor('name')}</div>
+                    <div className="co-field"><label htmlFor="co-phone">Mobile Number *</label><input id="co-phone" required type="tel" value={form.phone} onChange={set('phone')} placeholder="+91 98765 43210" autoComplete="tel" aria-invalid={!!errors.phone} />{errFor('phone')}</div>
                   </div>
-                  <div className="co-field"><label>Email Address *</label><input required type="email" value={form.email} onChange={set('email')} autoComplete="email" /></div>
-                  <button type="button" className="s-btn sm" onClick={() => setStep((s) => Math.min(5, s + 1))}>Continue to Address <span className="arrow">→</span></button>
+                  <div className="co-field"><label htmlFor="co-email">Email Address *</label><input id="co-email" required type="email" value={form.email} onChange={set('email')} autoComplete="email" aria-invalid={!!errors.email} />{errFor('email')}</div>
                 </section>
 
-                {/* 02 · address */}
+                {/* delivery address */}
                 <section className="co-card" style={{ marginTop: 18 }}>
                   <h3><b style={{ color: 'var(--rust)' }}>02</b> Delivery Address</h3>
-                  <div className="co-field"><label>Address Line 1 *</label><input required value={form.address} onChange={set('address')} autoComplete="address-line1" /></div>
-                  <div className="co-field"><label>Address Line 2 (optional)</label><input value={form.address2} onChange={set('address2')} autoComplete="address-line2" /></div>
+                  <div className="co-field"><label htmlFor="co-address">Address Line 1 *</label><input id="co-address" required value={form.address} onChange={set('address')} autoComplete="address-line1" aria-invalid={!!errors.address} />{errFor('address')}</div>
+                  <div className="co-field"><label htmlFor="co-address2">Address Line 2 (optional)</label><input id="co-address2" value={form.address2} onChange={set('address2')} autoComplete="address-line2" /></div>
                   <div className="co-2col">
-                    <div className="co-field"><label>City *</label><input required value={form.city} onChange={set('city')} autoComplete="address-level2" /></div>
-                    <div className="co-field"><label>State *</label><input required value={form.state} onChange={set('state')} autoComplete="address-level1" /></div>
+                    <div className="co-field"><label htmlFor="co-city">City *</label><input id="co-city" required value={form.city} onChange={set('city')} autoComplete="address-level2" aria-invalid={!!errors.city} />{errFor('city')}</div>
+                    <div className="co-field"><label htmlFor="co-state">State *</label><input id="co-state" required value={form.state} onChange={set('state')} autoComplete="address-level1" aria-invalid={!!errors.state} />{errFor('state')}</div>
                     <div className="co-field">
-                      <label>PIN Code *</label>
-                      <input required pattern="\d{6}" inputMode="numeric" maxLength={6} value={form.pin}
-                        onChange={(e) => setForm((f) => ({ ...f, pin: e.target.value.replace(/\D/g, '').slice(0, 6) }))} autoComplete="postal-code" />
+                      <label htmlFor="co-pin">PIN Code *</label>
+                      <input id="co-pin" required pattern="\d{6}" inputMode="numeric" maxLength={6} value={form.pin}
+                        onChange={(e) => setForm((f) => ({ ...f, pin: e.target.value.replace(/\D/g, '').slice(0, 6) }))} autoComplete="postal-code" aria-invalid={!!errors.pin} />
+                      {errFor('pin')}
                       {pinInfo?.found && <span className="hint ok">✓ {pinInfo.city}, {pinInfo.state}</span>}
                       {pinInfo && !pinInfo.found && <span className="hint" style={{ color: '#a02c1d' }}>We couldn’t find this PIN code — please check it.</span>}
                     </div>
                     <div className="co-field"><label>Country</label><input value="India" readOnly /></div>
                   </div>
-                  <button type="button" className="s-btn sm" onClick={() => setStep((s) => Math.min(5, s + 1))}>Continue to Payment <span className="arrow">→</span></button>
                 </section>
 
-                {/* 03 · payment */}
+                {/* payment method */}
                 <section className="co-card" style={{ marginTop: 18 }}>
                   <h3><b style={{ color: 'var(--rust)' }}>03</b> Payment Method</h3>
                   <div className="co-pay">
-                    <label className={`co-pay-opt ${payment === 'online' ? 'on' : ''}`}>
-                      <input type="radio" name="pay" checked={payment === 'online'} onChange={() => setPayment('online')} />
-                      <div><b>Pay online</b><div style={{ fontSize: 12, color: 'var(--ink-soft)' }}>UPI, cards, net banking and wallets — secured by Razorpay</div></div>
-                    </label>
-                    <label className={`co-pay-opt ${payment === 'cod' ? 'on' : ''}`}>
-                      <input type="radio" name="pay" checked={payment === 'cod'} onChange={() => setPayment('cod')} />
-                      <div><b>Cash on Delivery</b><div style={{ fontSize: 12, color: 'var(--ink-soft)' }}>Pay when your rug arrives</div></div>
-                    </label>
+                    {payOptions.length ? payOptions.map((o) => (
+                      <label key={o.id} className={`co-pay-opt ${payment === o.id ? 'on' : ''}`}>
+                        <input type="radio" name="pay" checked={payment === o.id} onChange={() => setPayment(o.id)} />
+                        <div><b>{o.label}</b><div style={{ fontSize: 12, color: 'var(--ink-soft)' }}>{o.hint}</div></div>
+                      </label>
+                    )) : (
+                      <p className="muted" style={{ fontSize: 13 }}>Payment options are being confirmed…</p>
+                    )}
                   </div>
-                  {fail && <p role="alert" className="co-err">{friendly(fail)}</p>}
-                  <button className="s-btn full" type="submit" disabled={placing} style={{ marginTop: 18 }}>
-                    {placing ? 'Preparing…' : payment === 'online' ? `Pay ${fmtINR(total)} securely` : `Place Order — ${fmtINR(total)}`}
-                  </button>
-                  <p className="co-secure">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg>
-                    Secure checkout — your payment information is encrypted and protected.
-                  </p>
+                  {ship.freeShippingAbove > 0 && subtotal < ship.freeShippingAbove && (
+                    <p style={{ fontSize: 12, color: 'var(--rust)', marginTop: 10 }}>Add {fmtINR(ship.freeShippingAbove - subtotal)} more for free shipping.</p>
+                  )}
+                  {payOn('online') && payment === 'online' && (
+                    <p style={{ fontSize: 12, color: 'var(--ink-soft)', marginTop: 10 }}>A secure Razorpay window opens to complete your payment. Your card or UPI details never touch our site.</p>
+                  )}
                 </section>
               </div>
 
-              {/* order summary */}
+              {/* order summary — the single submit lives here, Kridhya-style */}
               <aside className="cart-summary">
                 <h3>Order Summary</h3>
                 {items.map((i) => (
@@ -361,6 +357,15 @@ export default function Checkout() {
                 {discount > 0 && !couponMsg && <div className="coupon-msg">Coupon applied! You saved {fmtINR(discount)}.</div>}
                 <div className="sum-line"><span>Shipping</span><span className="num">{shipping === 0 ? 'Free' : fmtINR(shipping)}</span></div>
                 <div className="sum-line total"><span>Total</span><span className="num">{fmtINR(total)}</span></div>
+
+                {fail && <p role="alert" className="co-err" style={{ marginTop: 14 }}>{friendly(fail)}</p>}
+                <button className="s-btn full" type="submit" disabled={placing || !payOptions.length} style={{ marginTop: 16 }}>
+                  {placing ? 'Preparing…' : payment === 'online' ? `Pay ${fmtINR(total)} securely` : `Place Order — ${fmtINR(total)}`}
+                </button>
+                <p className="co-secure">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg>
+                  Secure checkout — your payment information is encrypted and protected.
+                </p>
               </aside>
             </div>
           </form>
